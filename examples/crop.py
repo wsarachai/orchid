@@ -4,6 +4,7 @@ from PIL import Image
 from resizeimage import resizeimage
 import glob
 
+IMAGE_SIZE = 224
 SRC_DIR = '/Users/sarachaii/Desktop/trains/resized/'
 DST_DIR = '/Users/sarachaii/Desktop/trains/resized4/'
 
@@ -38,15 +39,15 @@ for dirid in range(12):
             with Image.open(f) as img:
                 w, h = img.size
 
-                if w==224 and h==224:
+                if w==IMAGE_SIZE and h==IMAGE_SIZE:
                     pass
                 else:
                     if w < h:
-                        img = resizeimage.resize_width(img, 224)
+                        img = resizeimage.resize_width(img, IMAGE_SIZE)
                     else:
-                        img = resizeimage.resize_height(img, 224)
+                        img = resizeimage.resize_height(img, IMAGE_SIZE)
 
-                    img = resizeimage.resize_crop(img, [224, 224])
+                    img = resizeimage.resize_crop(img, [IMAGE_SIZE, IMAGE_SIZE])
 
                 if fileid > 80:
                     img.save(TEST_DIR + '/' +str(dirid) + '_' + str(fileid) + '.jpg', img.format)

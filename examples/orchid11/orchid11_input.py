@@ -4,40 +4,41 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import numpy
+import numpy as np
+import pandas as pd
+from scipy.misc import imread
 
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 
-IMAGE_SIZE = 224
 
+IMAGE_CHANNEL = 3
+IMAGE_SIZE = 224
 NUM_CLASSES = 11
 NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 880
 NUM_EXAMPLES_PER_EPOCH_FOR_EVAL = 220
 
+def read_csv(data_dir):
+    train = pd.read_csv(os.path.join(data_dir, 'train', 'train.csv'))
+    test = pd.read_csv(os.path.join(data_dir, 'test', 'test.csv'))
+
+    train.head()
+    test.head()
+
+    return  train, test
 
 def read_and_decode(filename_queue):
-  reader = tf.TFRecordReader()
-  _, serialized_example = reader.read(filename_queue)
+    image_reader = tf.WholeFileReader()
+    _, image_file = image_reader.read(filename_queue)
+    image = tf.image.decode_jpeg(image_file)
 
-  features = tf.parse_single_example(
-    serialized_example,
-    # Defaults are not specified since both keys are required.
-    features={
-      'height': tf.FixedLenFeature([], tf.int64),
-      'width': tf.FixedLenFeature([], tf.int64),
-      'depth': tf.FixedLenFeature([], tf.int64),
-      'label': tf.FixedLenFeature([], tf.int64),
-      'image_raw': tf.FixedLenFeature([], tf.string)
-  })
+    head, tail = os.path.split(image_file)
+    ilbl = tail.split('.')[0].split('_')[0]
 
-  image = tf.decode_raw(features['image_raw'], tf.uint8)
-  label = tf.cast(features['label'], tf.int32)
-  height = tf.cast(features['height'], tf.int32)
-  width = tf.cast(features['width'], tf.int32)
-  depth = tf.cast(features['depth'], tf.int32)
+    label = [[0 * NUM_CLASSES]][0]
+    label[int(ilbl)] = 1
 
-  return image, label, height, width, depth
+    return image, label, IMAGE_SIZE, IMAGE_SIZE, IMAGE_CHANNEL
 
 
 def read_orchid11(filename_queue):
@@ -103,62 +104,71 @@ def _generate_image_and_label_batch(image, label, min_queue_examples,
 
 
 def distorted_inputs(data_dir, batch_size):
-  filenames = [os.path.join(data_dir, 'orchid11-images-train-%d.tfrecords' % i) for i in xrange(44)]
-  for f in filenames:
-    if not tf.gfile.Exists(f):
-      raise ValueError('Failed to find file: ' + f)
+    train, test = read_csv(data_dir)
 
-  # Create a queue that produces the filenames to read.
-  filename_queue = tf.train.string_input_producer(filenames)
+    for f in train.filename:
+        image_path = os.path.join(data_dir, 'train', 'images' + str(IMAGE_SIZE), f)
+        if not tf.gfile.Exists(image_path):
+            raise ValueError('Failed to find file: ' + f)
 
-  # Read examples from files in the filename queue.
-  read_input = read_orchid11(filename_queue)
-  reshaped_image = tf.cast(read_input.uint8image, tf.float32)
+    filenames = []
+    for f in train.filename:
+        filenames.append(f)
 
-  height = IMAGE_SIZE
-  width = IMAGE_SIZE
+    # Create a queue that produces the filenames to read.
+    filename_queue = tf.train.string_input_producer(filenames)
+    #filename_queue = tf.train.string_input_producer(train.filename, num_epochs=None, shuffle=True, seed=None, shared_name=None, name=None)
 
-  # Image processing for training the network. Note the many random
-  # distortions applied to the image.
+    # Read examples from files in the filename queue.
+    read_input = read_orchid11(filename_queue)
+    reshaped_image = tf.cast(read_input.uint8image, tf.float32)
 
-  # Randomly crop a [height, width] section of the image.
-  distorted_image = tf.random_crop(reshaped_image, [height, width, 3])
+    height = IMAGE_SIZE
+    width = IMAGE_SIZE
 
-  # Randomly flip the image horizontally.
-  distorted_image = tf.image.random_flip_left_right(distorted_image)
+    # Image processing for training the network. Note the many random
+    # distortions applied to the image.
 
-  # Because these operations are not commutative, consider randomizing
-  # the order their operation.
-  # NOTE: since per_image_standardization zeros the mean and makes
-  # the stddev unit, this likely has no effect see tensorflow#1458.
-  distorted_image = tf.image.random_brightness(distorted_image, max_delta=63)
-  distorted_image = tf.image.random_contrast(distorted_image, lower=0.2, upper=1.8)
+    # Randomly crop a [height, width] section of the image.
+    distorted_image = tf.random_crop(reshaped_image, [height, width, 3])
 
-  # Subtract off the mean and divide by the variance of the pixels.
-  float_image = tf.image.per_image_standardization(distorted_image)
+    # Randomly flip the image horizontally.
+    distorted_image = tf.image.random_flip_left_right(distorted_image)
 
-  # Set the shapes of tensors.
-  float_image.set_shape([height, width, 3])
+    # Because these operations are not commutative, consider randomizing
+    # the order their operation.
+    # NOTE: since per_image_standardization zeros the mean and makes
+    # the stddev unit, this likely has no effect see tensorflow#1458.
+    distorted_image = tf.image.random_brightness(distorted_image, max_delta=63)
+    distorted_image = tf.image.random_contrast(distorted_image, lower=0.2, upper=1.8)
 
-  # Ensure that the random shuffling has good mixing properties.
-  min_fraction_of_examples_in_queue = 0.4
-  min_queue_examples = int(NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN *
-                           min_fraction_of_examples_in_queue)
-  print ('Filling queue with %d CIFAR images before starting to train. '
-         'This will take a few minutes.' % min_queue_examples)
+    # Subtract off the mean and divide by the variance of the pixels.
+    float_image = tf.image.per_image_standardization(distorted_image)
 
-  # Generate a batch of images and labels by building up a queue of examples.
-  return _generate_image_and_label_batch(float_image, read_input.label,
-                                         min_queue_examples, batch_size,
-                                         shuffle=True)
+    # Set the shapes of tensors.
+    float_image.set_shape([height, width, 3])
+
+    # Ensure that the random shuffling has good mixing properties.
+    min_fraction_of_examples_in_queue = 0.4
+    min_queue_examples = int(NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN *
+                             min_fraction_of_examples_in_queue)
+    print ('Filling queue with %d CIFAR images before starting to train. '
+           'This will take a few minutes.' % min_queue_examples)
+
+    # Generate a batch of images and labels by building up a queue of examples.
+    return _generate_image_and_label_batch(float_image, read_input.label,
+                                           min_queue_examples, batch_size,
+                                           shuffle=True)
 
 
 def inputs(eval_data, data_dir, batch_size):
+  train, test = read_csv(data_dir)
+
   if not eval_data:
-    filenames = [os.path.join(data_dir, 'orchid11-images-train-%d.tfrecords' % i) for i in xrange(44)]
+    filenames = train.filename
     num_examples_per_epoch = NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN
   else:
-    filenames = [os.path.join(data_dir, 'orchid11-images-test-%d.tfrecords') % i for i in xrange(11)]
+    filenames = test.filename
     num_examples_per_epoch = NUM_EXAMPLES_PER_EPOCH_FOR_EVAL
 
   for f in filenames:
@@ -167,6 +177,7 @@ def inputs(eval_data, data_dir, batch_size):
 
   # Create a queue that produces the filenames to read.
   filename_queue = tf.train.string_input_producer(filenames)
+  #filename_queue = tf.train.string_input_producer(train.filename, num_epochs=None, shuffle=True, seed=None, shared_name=None, name=None)
 
   # Read examples from files in the filename queue.
   read_input = read_orchid11(filename_queue)

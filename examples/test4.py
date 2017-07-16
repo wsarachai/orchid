@@ -7,13 +7,17 @@ from matplotlib import pyplot as plt
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
+IMAGE_CHANNEL = 3
+IMAGE_SIZE = 32
+IMAGE_BUFF_SIZE = IMAGE_SIZE*IMAGE_SIZE*IMAGE_CHANNEL
+
 FLAGS = tf.app.flags.FLAGS
 
 tf.app.flags.DEFINE_string('root_dir', '/Users/sarachaii/Desktop/trains/',
                            'Root directory.')
 tf.app.flags.DEFINE_string('data_dir', '/Users/sarachaii/Desktop/trains/data/',
                            'Data directory.')
-tf.app.flags.DEFINE_string('summaries_dir', '/Users/sarachaii/Desktop/trains/summaries/',
+tf.app.flags.DEFINE_string('summaries_dir', '/Users/sarachaii/Desktop/trains/summaries' + str(IMAGE_SIZE) + '/',
                            'Summaries directory.')
 tf.app.flags.DEFINE_integer('epochs', 100,
                             'number of epochs')
@@ -21,10 +25,6 @@ tf.app.flags.DEFINE_integer('batch_size', 128,
                             'Batch siez.')
 tf.app.flags.DEFINE_float('dropout', 1.0,
                           'Dropout rate.')
-
-IMAGE_CHANNEL = 3
-IMAGE_SIZE = 224
-IMAGE_BUFF_SIZE = IMAGE_SIZE*IMAGE_SIZE*IMAGE_CHANNEL
 
 # To stop potential randomness
 rng = np.random.RandomState(128)
@@ -41,7 +41,7 @@ test.head()
 
 temp = []
 for img_name in train.filename:
-    image_path = os.path.join(FLAGS.data_dir, 'train', 'images', img_name)
+    image_path = os.path.join(FLAGS.data_dir, 'train', 'images' + str(IMAGE_SIZE), img_name)
     img = imread(image_path, flatten=False)
     img = img.astype('float32')
     #print (img.shape)
@@ -51,7 +51,7 @@ train_x = np.stack(temp)
 
 temp = []
 for img_name in test.filename:
-    image_path = os.path.join(FLAGS.data_dir, 'test', 'images', img_name)
+    image_path = os.path.join(FLAGS.data_dir, 'test', 'images' + str(IMAGE_SIZE), img_name)
     img = imread(image_path, flatten=False)
     img = img.astype('float32')
     temp.append(img)
@@ -246,16 +246,34 @@ def train_model():
     print('Accuracy: %s' % acc)
 
 
-    image_path = os.path.join(FLAGS.data_dir, 'test/images/6_91.jpg')
+    image_path = os.path.join(FLAGS.data_dir, 'test/images' + str(IMAGE_SIZE) + '/2_81.jpg')
     pd_img = imread(image_path, flatten=False)
     pd_img = pd_img.astype('float32')
     pd_img = pd_img.reshape(-1, IMAGE_BUFF_SIZE)
     pd_img = preproc(pd_img)
 
-    predict = tf.argmax(output_layer, 1)
-    pred = predict.eval({_x: pd_img, keep_prob: 1.0})
+    perc = output_layer.eval({_x: pd_img, keep_prob: 1.0})
 
-    print (pred)
+    perc_max = tf.nn.relu(perc)
+    perc_max = perc_max.eval()
+
+    perc_sum = tf.reduce_sum(perc_max, 1)
+    perc_sum = perc_sum.eval()
+
+    print (perc_max)
+    print (perc_sum)
+
+    perc_ans = perc_max / perc_sum * 100
+
+    lb = 1
+    for p in perc_ans[0]:
+        print ("label {0}: {1:2.2f}%".format(lb, p))
+        lb += 1
+
+    #predict = tf.argmax(output_layer, 1)
+    #pred = predict.eval({_x: pd_img, keep_prob: 1.0})
+
+    #print (pred)
 
 
 def main(_):

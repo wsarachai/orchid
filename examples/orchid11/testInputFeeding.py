@@ -13,9 +13,9 @@ tf.app.flags.DEFINE_string('root_dir', '/Users/sarachaii/Desktop/trains/',
                            'Root directory.')
 tf.app.flags.DEFINE_string('data_dir', '/Users/sarachaii/Desktop/trains/data/',
                            'Data directory.')
-tf.app.flags.DEFINE_string('summaries_dir', '/Users/sarachaii/Desktop/trains/summaries32/',
+tf.app.flags.DEFINE_string('summaries_dir', '/Users/sarachaii/Desktop/trains/summaries/',
                            'Summaries directory.')
-tf.app.flags.DEFINE_integer('epochs', 1000,
+tf.app.flags.DEFINE_integer('epochs', 50000,
                             'number of epochs')
 tf.app.flags.DEFINE_integer('batch_size', 128,
                             'Batch siez.')
@@ -58,6 +58,7 @@ for img_name in test.filename:
 
 test_x = np.stack(temp)
 
+
 def conv2d(x, W):
   """conv2d returns a 2d convolution layer with full stride."""
   return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
@@ -97,7 +98,6 @@ def batch_creator(batch_size, dataset_name):
     batch_x = _dataset[[batch_mask]].reshape(-1, IMAGE_BUFF_SIZE)
     batch_x = preproc(batch_x)
 
-    #if dataset_name == 'train':
     batch_y = eval(dataset_name).ix[batch_mask, 'label'].values
     batch_y = dense_to_one_hot(batch_y)
 
