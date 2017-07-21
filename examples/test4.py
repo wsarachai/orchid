@@ -246,7 +246,7 @@ def train_model():
     print('Accuracy: %s' % acc)
 
 
-    image_path = os.path.join(FLAGS.data_dir, 'test/images' + str(IMAGE_SIZE) + '/2_81.jpg')
+    image_path = os.path.join(FLAGS.data_dir, 'test/images' + str(IMAGE_SIZE) + '/4_85.jpg')
     pd_img = imread(image_path, flatten=False)
     pd_img = pd_img.astype('float32')
     pd_img = pd_img.reshape(-1, IMAGE_BUFF_SIZE)

@@ -32,11 +32,12 @@ def read_and_decode(filename_queue):
     _, image_file = image_reader.read(filename_queue)
     image = tf.image.decode_jpeg(image_file)
 
-    head, tail = os.path.split(image_file)
-    ilbl = tail.split('.')[0].split('_')[0]
-
-    label = [[0 * NUM_CLASSES]][0]
-    label[int(ilbl)] = 1
+    splitf = tf.string_split([image_file], '/')
+    v = splitf.values[-1]
+    splitf = tf.string_split([v], '_')
+    v = splitf.values[0]
+    label = tf.string_to_number(v, tf.int32)
+    #label = tf.one_hot(v, NUM_CLASSES)
 
     return image, label, IMAGE_SIZE, IMAGE_SIZE, IMAGE_CHANNEL
 
@@ -100,7 +101,7 @@ def _generate_image_and_label_batch(image, label, min_queue_examples,
   # Display the training images in the visualizer.
   tf.summary.image('images', images)
 
-  return images, tf.reshape(label_batch, [batch_size])
+  return images, label_batch
 
 
 def distorted_inputs(data_dir, batch_size):
@@ -113,7 +114,7 @@ def distorted_inputs(data_dir, batch_size):
 
     filenames = []
     for f in train.filename:
-        filenames.append(f)
+        filenames.append(os.path.join(data_dir, 'train', 'images224', f))
 
     # Create a queue that produces the filenames to read.
     filename_queue = tf.train.string_input_producer(filenames)

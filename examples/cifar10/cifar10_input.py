@@ -154,7 +154,7 @@ def distorted_inputs(data_dir, batch_size):
   """
   #filenames = [os.path.join(data_dir, 'data_batch_%d.bin' % i)
   #             for i in xrange(1, 6)]
-  filenames = [os.path.join(data_dir, '%d.tfrecords' % i)
+  filenames = [os.path.join(data_dir, 'data_batch_%d.bin' % i)
                for i in xrange(1, 6)]
   for f in filenames:
     if not tf.gfile.Exists(f):

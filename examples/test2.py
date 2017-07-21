@@ -1,7 +1,6 @@
 import os
 import numpy as np
 import pandas as pd
-from scipy.misc import imread
 import tensorflow as tf
 from matplotlib import pyplot as plt
 
@@ -15,7 +14,7 @@ tf.app.flags.DEFINE_string('data_dir', '/Users/sarachaii/Desktop/trains/data/',
                            'Data directory.')
 tf.app.flags.DEFINE_string('summaries_dir', '/Users/sarachaii/Desktop/trains/summaries32/',
                            'Summaries directory.')
-tf.app.flags.DEFINE_integer('epochs', 1000,
+tf.app.flags.DEFINE_integer('epochs', 2000,
                             'number of epochs')
 tf.app.flags.DEFINE_integer('batch_size', 128,
                             'Batch siez.')
@@ -40,33 +39,41 @@ test = pd.read_csv(os.path.join(FLAGS.data_dir, 'test', 'test.csv'))
 train.head()
 test.head()
 
-temp = []
-for img_name in train.filename:
-    image_path = os.path.join(FLAGS.data_dir, 'train', 'images' + str(IMAGE_SIZE), img_name)
-    img = imread(image_path, flatten=False)
-    img = img.astype('float32')
-    temp.append(img)
 
-train_x = np.stack(temp)
+def decode_image(var):
+    with tf.Session() as sess:
+        temp = []
 
-temp = []
-for img_name in test.filename:
-    image_path = os.path.join(FLAGS.data_dir, 'test', 'images' + str(IMAGE_SIZE), img_name)
-    img = imread(image_path, flatten=False)
-    img = img.astype('float32')
-    temp.append(img)
+        graph = tf.Graph()
+        with graph.as_default():
+            file_name = tf.placeholder(dtype=tf.string)
+            file = tf.read_file(file_name)
+            image = tf.image.decode_jpeg(file)
 
-test_x = np.stack(temp)
+        with tf.Session(graph=graph) as session:
+            tf.global_variables_initializer().run()
+            for img_name in eval(var).filename:
+                image_path = os.path.join(FLAGS.data_dir, var, 'images' + str(IMAGE_SIZE), img_name)
+                img = session.run(image, feed_dict={file_name: image_path})
+                img = img.astype('float32')
+                temp.append(img)
+            session.close()
+
+    return np.stack(temp)
+
+
+train_x = decode_image('train')
+test_x = decode_image('test')
 
 def conv2d(x, W):
-  """conv2d returns a 2d convolution layer with full stride."""
-  return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
+    """conv2d returns a 2d convolution layer with full stride."""
+    return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
 
 
 def max_pool_2x2(x):
-  """max_pool_2x2 downsamples a feature map by 2X."""
-  return tf.nn.max_pool(x, ksize=[1, 2, 2, 1],
-                        strides=[1, 2, 2, 1], padding='SAME')
+    """max_pool_2x2 downsamples a feature map by 2X."""
+    return tf.nn.max_pool(x, ksize=[1, 2, 2, 1],
+                          strides=[1, 2, 2, 1], padding='SAME')
 
 
 def dense_to_one_hot(labels_dense, num_classes=11):
