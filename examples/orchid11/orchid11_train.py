@@ -1,107 +1,82 @@
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
-from datetime import datetime
-import time
-
+import os
 import tensorflow as tf
 import orchid11
 
-FLAGS = tf.app.flags.FLAGS
 
-tf.app.flags.DEFINE_string('train_dir', '/Users/sarachaii/Desktop/trains/logs/',
-                           """Directory where to write event logs """
-                           """and checkpoint.""")
-tf.app.flags.DEFINE_integer('max_steps', 100,
-                            """Number of batches to run.""")
-tf.app.flags.DEFINE_boolean('log_device_placement', False,
-                            """Whether to log device placement.""")
-tf.app.flags.DEFINE_integer('log_frequency', 10,
-                            """How often to log results to the console.""")
-
-
-def train1():
-    with tf.Graph().as_default():
-        global_step = tf.contrib.framework.get_or_create_global_step()
-
-        # Get images and labels for ORCHID-11.
-        # Force input pipeline to CPU:0 to avoid operations sometimes ending up on
-        # GPU and resulting in a slow down.
-        with tf.device('/cpu:0'):
-            images, labels = orchid11.distorted_inputs()
-
-        # Build a Graph that computes the logits predictions from the
-        # inference model.
-        logits = orchid11.inference(images)
-
-        # Calculate loss.
-        loss = orchid11.loss(logits, labels)
-
-        train_op = orchid11.train(loss, global_step)
-
-        class _LoggerHook(tf.train.SessionRunHook):
-            """Logs loss and runtime."""
-
-            def begin(self):
-                self._step = -1
-                self._start_time = time.time()
-
-            def before_run(self, run_context):
-                self._step += 1
-                return tf.train.SessionRunArgs(loss)  # Asks for loss value.
-
-            def after_run(self, run_context, run_values):
-                if self._step % FLAGS.log_frequency == 0:
-                    current_time = time.time()
-                    duration = current_time - self._start_time
-                    self._start_time = current_time
-
-                    loss_value = run_values.results
-                    examples_per_sec = FLAGS.log_frequency * FLAGS.batch_size / duration
-                    sec_per_batch = float(duration / FLAGS.log_frequency)
-
-                    format_str = ('%s: step %d, loss = %.2f (%.1f examples/sec; %.3f sec/batch)')
-                    print (format_str % (datetime.now(), self._step, loss_value, examples_per_sec, sec_per_batch))
-
-        with tf.train.MonitoredTrainingSession(
-            checkpoint_dir=FLAGS.train_dir,
-                hooks=[tf.train.StopAtStepHook(last_step=FLAGS.max_steps), tf.train.NanTensorHook(loss), _LoggerHook()],
-                config=tf.ConfigProto(log_device_placement=FLAGS.log_device_placement)) as mon_sess:
-            while not mon_sess.should_stop():
-                mon_sess.run(train_op)
-
-
-def train():
-    global_step = tf.contrib.framework.get_or_create_global_step()
+def main():
     sess = tf.InteractiveSession()
 
-    with tf.device('/cpu:0'):
-        images, labels = orchid11.distorted_inputs()
+    # define placeholders
+    with tf.name_scope('input'):
+        _x = tf.placeholder(tf.float32, [None, orchid11.IMAGE_BUFF_SIZE])
+        _y = tf.placeholder(tf.float32, [None, 11])
 
-    logits = orchid11.inference(images)
+    with tf.name_scope('input_reshape'):
+        x_image = tf.reshape(_x, [-1, orchid11.IMAGE_SIZE, orchid11.IMAGE_SIZE, orchid11.IMAGE_CHANNEL])
+        tf.summary.image('input', x_image, 11)
 
-    loss = orchid11.loss(logits, labels)
+    output_layer, keep_prob = orchid11.deepnn(x_image)
+
+    with tf.name_scope('total'):
+        #output_layer = tf.nn.softmax(output_layer)
+        #cross_entropy = tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(output_layer), reduction_indices=[1]))
+        cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=output_layer, labels=_y))
+
+    tf.summary.scalar('cross_entropy', cross_entropy)
+
+    with tf.name_scope('train'):
+        optimizer = tf.train.GradientDescentOptimizer(orchid11.LEARNING_RATE).minimize(cross_entropy)
+        #optimizer = tf.train.AdamOptimizer(learning_rate=0.01).minimize(cross_entropy)
+
+    # find predictions on val set
+    with tf.name_scope('accuracy'):
+        with tf.name_scope('correct_prediction'):
+            pred_temp = tf.equal(tf.argmax(output_layer, 1), tf.argmax(_y, 1))
+        with tf.name_scope('accuracy'):
+            accuracy = tf.reduce_mean(tf.cast(pred_temp, tf.float32))
+
+    tf.summary.scalar('accuracy', accuracy)
+
+    merged = tf.summary.merge_all()
+
+    train_writer = tf.summary.FileWriter(orchid11.FLAGS.summaries_dir + '/train', sess.graph)
+    test_writer = tf.summary.FileWriter(orchid11.FLAGS.summaries_dir + '/test')
+
+    # Add ops to save and restore all the variables.
+    saver = tf.train.Saver()
 
     tf.global_variables_initializer().run()
 
-    coord = tf.train.Coordinator()
-    threads = tf.train.start_queue_runners(coord=coord)
+    for step in range(orchid11.FLAGS.epochs):
+        if step % 40 == 0:  # Record summaries and test-set accuracy
+            summary, acc = sess.run([merged, accuracy], feed_dict=orchid11.feed_dict(False, _x, _y, keep_prob))
+            test_writer.add_summary(summary, step)
+            print('Accuracy at step %s: %s' % (step, acc))
+        else:
+            #total_batch = int(train.shape[0] / FLAGS.batch_size)
+            #for i in range(total_batch):
+            if step % 1000 == 9:  # Record execution stats
+                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                run_metadata = tf.RunMetadata()
+                summary, _ = sess.run([merged, optimizer],
+                                      feed_dict=orchid11.feed_dict(True, _x, _y, keep_prob),
+                                      options=run_options,
+                                      run_metadata=run_metadata)
+                train_writer.add_run_metadata(run_metadata, 'step%03d' % step)
+                train_writer.add_summary(summary, step)
+                print('Adding run metadata for', step)
+            else:  # Record a summary
+                summary, _ = sess.run([merged, optimizer], feed_dict=orchid11.feed_dict(True, _x, _y, keep_prob))
+                train_writer.add_summary(summary, step)
 
-    for step in range(FLAGS.max_steps):
-        sess.run(loss)
+    print ("\nTraining complete!")
 
-    coord.request_stop()
-    coord.join(threads)
+    save_path = saver.save(sess, os.path.join(orchid11.FLAGS.summaries_dir, "model.ckpt"))
+    print("Model saved in file: %s" % save_path)
 
-def main(argv=None):  # pylint: disable=unused-argument
-    orchid11.maybe_download_and_extract()
-    if tf.gfile.Exists(FLAGS.train_dir):
-        tf.gfile.DeleteRecursively(FLAGS.train_dir)
-    tf.gfile.MakeDirs(FLAGS.train_dir)
-    train()
+    train_writer.close()
+    test_writer.close()
 
 
 if __name__ == '__main__':
-  tf.app.run()
+    main()

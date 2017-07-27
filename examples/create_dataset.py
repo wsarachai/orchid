@@ -11,11 +11,11 @@ import pickle
 
 FLAGS = tf.app.flags.FLAGS
 
-tf.app.flags.DEFINE_string('image_dir', '/Users/sarachaii/Desktop/trains/resized3/',
+tf.app.flags.DEFINE_string('src_dir', '/Users/sarachaii/Desktop/trains/data/gt/',
                            'Directory to source of images')
-tf.app.flags.DEFINE_string('data_dir', '/Users/sarachaii/Desktop/trains/orchid11_data3/',
+tf.app.flags.DEFINE_string('data_dir', '/Users/sarachaii/Desktop/trains/orchid11_gt_data/',
                             'Directory to download data files and write the converted result')
-tf.app.flags.DEFINE_string('file_ext', '*.jpg',
+tf.app.flags.DEFINE_string('file_ext', '*.png',
                             'The extension of image files')
 
 
@@ -94,7 +94,7 @@ def convert_to(images, labels, name):
   writer.close()
 
 def main(unused_argv):
-  dirs = [FLAGS.image_dir + i for i in os.listdir(FLAGS.image_dir)]
+  dirs = [FLAGS.src_dir + i for i in os.listdir(FLAGS.src_dir)]
 
   ilabel = np.uint8(0)
 

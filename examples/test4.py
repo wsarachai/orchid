@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from scipy.misc import imread
 import tensorflow as tf
-from matplotlib import pyplot as plt
+#from matplotlib import pyplot as plt
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
@@ -243,10 +243,12 @@ def train_model():
 
     summary, acc = sess.run([merged, accuracy], feed_dict=feed_dict(False))
     valid_writer.add_summary(summary)
+
+
+    image_path = os.path.join(FLAGS.data_dir, 'test/images' + str(IMAGE_SIZE) + '/5_91.jpg')
+    print (image_path)
     print('Accuracy: %s' % acc)
 
-
-    image_path = os.path.join(FLAGS.data_dir, 'test/images' + str(IMAGE_SIZE) + '/4_85.jpg')
     pd_img = imread(image_path, flatten=False)
     pd_img = pd_img.astype('float32')
     pd_img = pd_img.reshape(-1, IMAGE_BUFF_SIZE)
@@ -260,12 +262,12 @@ def train_model():
     perc_sum = tf.reduce_sum(perc_max, 1)
     perc_sum = perc_sum.eval()
 
-    print (perc_max)
-    print (perc_sum)
+    #print (perc_max)
+    #print (perc_sum)
 
     perc_ans = perc_max / perc_sum * 100
 
-    lb = 1
+    lb = 0
     for p in perc_ans[0]:
         print ("label {0}: {1:2.2f}%".format(lb, p))
         lb += 1

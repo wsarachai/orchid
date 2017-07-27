@@ -2,7 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from matplotlib import pyplot as plt
+#from matplotlib import pyplot as plt
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
@@ -10,11 +10,11 @@ FLAGS = tf.app.flags.FLAGS
 
 tf.app.flags.DEFINE_string('root_dir', '/Users/sarachaii/Desktop/trains/',
                            'Root directory.')
-tf.app.flags.DEFINE_string('data_dir', '/Users/sarachaii/Desktop/trains/data/',
+tf.app.flags.DEFINE_string('data_dir', '/Users/sarachaii/Desktop/trains/dataset/general/',
                            'Data directory.')
-tf.app.flags.DEFINE_string('summaries_dir', '/Users/sarachaii/Desktop/trains/summaries32/',
+tf.app.flags.DEFINE_string('summaries_dir', '/Users/sarachaii/Desktop/trains/logs/general/summaries32/',
                            'Summaries directory.')
-tf.app.flags.DEFINE_integer('epochs', 2000,
+tf.app.flags.DEFINE_integer('epochs', 25000,
                             'number of epochs')
 tf.app.flags.DEFINE_integer('batch_size', 128,
                             'Batch siez.')
@@ -122,7 +122,7 @@ def train_model():
 
     with tf.name_scope('input_reshape'):
         x_image = tf.reshape(_x, [-1, IMAGE_SIZE, IMAGE_SIZE, IMAGE_CHANNEL])
-        tf.summary.image('input', x_image, 10)
+        tf.summary.image('input', x_image, 11)
 
     def weight_variable(shape):
         """weight_variable generates a weight variable of a given shape."""
@@ -245,7 +245,7 @@ def train_model():
     saver = tf.train.Saver()
 
     for step in range(FLAGS.epochs):
-        if step % 10 == 0:  # Record summaries and test-set accuracy
+        if step % 40 == 0:  # Record summaries and test-set accuracy
             summary, acc = sess.run([merged, accuracy], feed_dict=feed_dict(False))
             test_writer.add_summary(summary, step)
             print('Accuracy at step %s: %s' % (step, acc))

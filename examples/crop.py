@@ -4,9 +4,9 @@ from PIL import Image
 from resizeimage import resizeimage
 import glob
 
-IMAGE_SIZE = 224
-SRC_DIR = '/Users/sarachaii/Desktop/trains/resized/'
-DST_DIR = '/Users/sarachaii/Desktop/trains/resized4/'
+IMAGE_SIZE = 32
+SRC_DIR = '/Users/sarachaii/Desktop/trains/raw_datas/processed/'
+DST_DIR = '/Users/sarachaii/Desktop/trains/resized' + str(IMAGE_SIZE) + '/'
 
 TRAIN_DIR = os.path.join(DST_DIR, 'train')
 TEST_DIR = os.path.join(DST_DIR, 'test')
@@ -17,6 +17,7 @@ if os.path.isdir(TRAIN_DIR):
 if os.path.isdir(TEST_DIR):
     shutil.rmtree(TEST_DIR)
 
+#os.mkdir(DST_DIR)
 os.mkdir(TRAIN_DIR)
 os.mkdir(TEST_DIR)
 
@@ -30,7 +31,7 @@ for dirid in range(12):
 
     #os.mkdir(SAVE_DIR)
 
-    files = glob.glob(SRC_DIR + str(dirid+1) + "/*.jpg")
+    files = glob.glob(SRC_DIR + str(dirid+1) + "/*.png")
 
     fileid = 1
 
@@ -50,7 +51,7 @@ for dirid in range(12):
                     img = resizeimage.resize_crop(img, [IMAGE_SIZE, IMAGE_SIZE])
 
                 if fileid > 80:
-                    img.save(TEST_DIR + '/' +str(dirid) + '_' + str(fileid) + '.jpg', img.format)
+                    img.save(TEST_DIR + '/' +str(dirid) + '_' + str(fileid) + '.png', img.format)
                 else:
-                    img.save(TRAIN_DIR + '/' +str(dirid) + '_' + str(fileid) + '.jpg', img.format)
+                    img.save(TRAIN_DIR + '/' +str(dirid) + '_' + str(fileid) + '.png', img.format)
                 fileid = fileid + 1

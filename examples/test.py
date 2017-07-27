@@ -1,58 +1,81 @@
 import os
 import numpy as np
 import pandas as pd
-from scipy.misc import imread
-from sklearn.metrics import accuracy_score
 import tensorflow as tf
-from matplotlib import pyplot as plt
+#from matplotlib import pyplot as plt
 
-tf.logging.set_verbosity(tf.logging.INFO)
+IMAGE_CHANNEL = 3
+IMAGE_SIZE = 32
+IMAGE_BUFF_SIZE = IMAGE_SIZE*IMAGE_SIZE*IMAGE_CHANNEL
+LEARNING_RATE = 0.001
+
+DATA_TYPE = 'ground-truth'
+#DATA_TYPE = 'general'
+
+#tf.logging.set_verbosity(tf.logging.INFO)
+
+ROOT_DIR = '/Users/sarachaii/Desktop/trains/'
+DATASET_DIR = os.path.join(ROOT_DIR, 'dataset', DATA_TYPE)
+SUMMARIES_DIR = os.path.join(ROOT_DIR, 'logs', DATA_TYPE, 'summaries32')
+
+FLAGS = tf.app.flags.FLAGS
+
+tf.app.flags.DEFINE_string('root_dir', ROOT_DIR, 'Root directory.')
+tf.app.flags.DEFINE_string('data_dir', DATASET_DIR, 'Data directory.')
+tf.app.flags.DEFINE_string('summaries_dir', SUMMARIES_DIR, 'Summaries directory.')
+tf.app.flags.DEFINE_integer('epochs', 20000, 'number of epochs')
+tf.app.flags.DEFINE_integer('batch_size', 128, 'Batch size.')
+tf.app.flags.DEFINE_float('dropout', 0.5, 'Dropout rate.')
 
 # To stop potential randomness
-seed = 128
-rng = np.random.RandomState(seed)
-
-root_dir = '/Users/sarachaii/Desktop/trains/'
-
-data_dir = os.path.join(root_dir, 'data')
-#sub_dir = os.path.join(root_dir, 'sub')
+rng = np.random.RandomState(128)
 
 # check for existence
-os.path.exists(root_dir)
-os.path.exists(data_dir)
-#os.path.exists(sub_dir)
+os.path.exists(FLAGS.root_dir)
+os.path.exists(FLAGS.data_dir)
 
-train = pd.read_csv(os.path.join(data_dir, 'train', 'train.csv'))
-test = pd.read_csv(os.path.join(data_dir, 'test', 'test.csv'))
-#sample_submission = pd.read_csv(os.path.join(data_dir, 'Sample_Submission.csv'))
+train = pd.read_csv(os.path.join(FLAGS.data_dir, 'train', 'train.csv'))
+test = pd.read_csv(os.path.join(FLAGS.data_dir, 'test', 'test.csv'))
 
 train.head()
 test.head()
 
-temp = []
-for img_name in train.filename:
-    image_path = os.path.join(data_dir, 'train', 'images', img_name)
-    img = imread(image_path, flatten=False)
-    img = img.astype('float32')
-    #print (img.shape)
-    temp.append(img)
 
-train_x = np.stack(temp)
+def decode_image(var):
+    with tf.Session() as sess:
+        temp = []
 
-temp = []
-for img_name in test.filename:
-    image_path = os.path.join(data_dir, 'test', 'images', img_name)
-    img = imread(image_path, flatten=True)
-    img = img.astype('float32')
-    temp.append(img)
+        graph = tf.Graph()
+        with graph.as_default():
+            file_name = tf.placeholder(dtype=tf.string)
+            file = tf.read_file(file_name)
+            image = tf.image.decode_jpeg(file)
+            image = tf.cast(image, tf.float32)
+            image.set_shape((IMAGE_SIZE, IMAGE_SIZE, IMAGE_CHANNEL))
 
-test_x = np.stack(temp)
+        with tf.Session(graph=graph) as session:
+            tf.global_variables_initializer().run()
+            for img_name in eval(var).filename:
+                image_path = os.path.join(FLAGS.data_dir, var, 'images' + str(IMAGE_SIZE), img_name)
+                img = session.run(image, feed_dict={file_name: image_path})
+                temp.append(img)
+            session.close()
+
+    return np.stack(temp)
 
 
-split_size = int(train_x.shape[0]*0.7)
+test_x = decode_image('test')
+train_x = decode_image('train')
 
-train_x, val_x = train_x[:split_size], train_x[split_size:]
-train_y, val_y = train.label.values[:split_size], train.label.values[split_size:]
+def conv2d(x, W):
+    """conv2d returns a 2d convolution layer with full stride."""
+    return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
+
+
+def max_pool_2x2(x):
+    """max_pool_2x2 downsamples a feature map by 2X."""
+    return tf.nn.max_pool(x, ksize=[1, 2, 2, 1],
+                          strides=[1, 2, 2, 1], padding='SAME')
 
 
 def dense_to_one_hot(labels_dense, num_classes=11):
@@ -72,89 +95,194 @@ def preproc(unclean_batch_x):
     return temp_batch
 
 
-def batch_creator(batch_size, dataset_length, dataset_name):
+def batch_creator(batch_size, dataset_name):
+    _dataset = eval(dataset_name + '_x')
+
+    dataset_length = _dataset.shape[0]
+
     """Create batch with random samples and return appropriate format"""
     batch_mask = rng.choice(dataset_length, batch_size)
 
-    batch_x = eval(dataset_name + '_x')[[batch_mask]].reshape(-1, input_num_units)
+    batch_x = _dataset[[batch_mask]].reshape(-1, IMAGE_BUFF_SIZE)
     batch_x = preproc(batch_x)
 
-    if dataset_name == 'train':
-        batch_y = eval(dataset_name).ix[batch_mask, 'label'].values
-        batch_y = dense_to_one_hot(batch_y)
+    #if dataset_name == 'train':
+    batch_y = eval(dataset_name).ix[batch_mask, 'label'].values
+    batch_y = dense_to_one_hot(batch_y)
 
     return batch_x, batch_y
 
 
-### set all variables
+def train_model():
+    # define placeholders
+    with tf.name_scope('input'):
+        _x = tf.placeholder(tf.float32, [None, IMAGE_BUFF_SIZE])
+        _y = tf.placeholder(tf.float32, [None, 11])
 
-# number of neurons in each layer
-input_num_units = 32*32*3
-hidden_num_units = 500
-output_num_units = 11
+    with tf.name_scope('input_reshape'):
+        x_image = tf.reshape(_x, [-1, IMAGE_SIZE, IMAGE_SIZE, IMAGE_CHANNEL])
+        tf.summary.image('input', x_image, 11)
 
-# set remaining variables
-epochs = 300
-batch_size = 128
+    def weight_variable(shape):
+        """weight_variable generates a weight variable of a given shape."""
+        initial = tf.truncated_normal(shape, stddev=0.1)
+        return tf.Variable(initial)
 
-def nn():
-    ### define weights and biases of the neural network (refer this article if you don't understand the terminologies)
+    def bias_variable(shape):
+        """bias_variable generates a bias variable of a given shape."""
+        initial = tf.constant(0.1, shape=shape)
+        return tf.Variable(initial)
 
-    weights = {
-        'hidden': tf.Variable(tf.random_normal([input_num_units, hidden_num_units], seed=seed)),
-        'output': tf.Variable(tf.random_normal([hidden_num_units, output_num_units], seed=seed))
-    }
+    def variable_summaries(var):
+        """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+        with tf.name_scope('summaries'):
+            mean = tf.reduce_mean(var)
+            tf.summary.scalar('mean', mean)
+            with tf.name_scope('stddev'):
+                stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+            tf.summary.scalar('stddev', stddev)
+            tf.summary.scalar('max', tf.reduce_max(var))
+            tf.summary.scalar('min', tf.reduce_min(var))
+            tf.summary.histogram('histogram', var)
 
-    biases = {
-        'hidden': tf.Variable(tf.random_normal([hidden_num_units], seed=seed)),
-        'output': tf.Variable(tf.random_normal([output_num_units], seed=seed))
-    }
+    def deepnn(x_image):
+        with tf.name_scope('conv1_layer'):
+            with tf.name_scope('weights'):
+                W_conv1 = weight_variable([5, 5, IMAGE_CHANNEL, 32])
+                variable_summaries(W_conv1)
 
-    hidden_layer = tf.add(tf.matmul(x, weights['hidden']), biases['hidden'])
-    hidden_layer = tf.nn.relu(hidden_layer)
+            with tf.name_scope('biases'):
+                b_conv1 = bias_variable([32])
+                variable_summaries(b_conv1)
 
-    output_layer = tf.matmul(hidden_layer, weights['output']) + biases['output']
+            with tf.name_scope('Wx_plus_b'):
+                h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
+                variable_summaries(h_conv1)
 
-    return output_layer
+        with tf.name_scope('max_pool'):
+            h_pool1 = max_pool_2x2(h_conv1)
+            variable_summaries(h_pool1)
 
-# define placeholders
-x = tf.placeholder(tf.float32, [None, input_num_units])
-y = tf.placeholder(tf.float32, [None, output_num_units])
+        with tf.name_scope('conv2_layer'):
+            with tf.name_scope('weights'):
+                W_conv2 = weight_variable([5, 5, 32, 64])
+                variable_summaries(W_conv2)
 
-output_layer = nn()
+            with tf.name_scope('biases'):
+                b_conv2 = bias_variable([64])
+                variable_summaries(b_conv2)
 
-cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=output_layer, labels=y))
-optimizer = tf.train.AdamOptimizer(learning_rate=0.01).minimize(cost)
+            with tf.name_scope('Wx_plus_b'):
+                h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
+                variable_summaries(h_conv2)
 
-init = tf.initialize_all_variables()
+        with tf.name_scope('max_pool'):
+            h_pool2 = max_pool_2x2(h_conv2)
+            variable_summaries(h_pool2)
 
-with tf.Session() as sess:
-    # create initialized variables
-    sess.run(init)
+        reduce_from_maxpool = IMAGE_SIZE / 4
+        reduce_buff = reduce_from_maxpool * reduce_from_maxpool * 64
 
-    ### for each epoch, do:
-    ###   for each batch, do:
-    ###     create pre-processed batch
-    ###     run optimizer by feeding batch
-    ###     find cost and reiterate to minimize
+        with tf.name_scope('fullyc_1'):
+            W_fc1 = weight_variable([reduce_buff, 1024])
+            b_fc1 = bias_variable([1024])
 
-    for epoch in range(epochs):
-        avg_cost = 0
-        total_batch = int(train.shape[0] / batch_size)
-        for i in range(total_batch):
-            batch_x, batch_y = batch_creator(batch_size, train_x.shape[0], 'train')
-            _, c = sess.run([optimizer, cost], feed_dict={x: batch_x, y: batch_y})
+            h_pool2_flat = tf.reshape(h_pool2, [-1, reduce_buff])
+            hidden_layer = tf.add(tf.matmul(h_pool2_flat, W_fc1), b_fc1)
+            hidden_layer = tf.nn.relu(hidden_layer)
 
-            avg_cost += c / total_batch
+        with tf.name_scope('dropout') as scope:
+            keep_prob = tf.placeholder(tf.float32)
+            tf.summary.scalar('dropout_keep_probability', keep_prob)
+            h_fc1_drop = tf.nn.dropout(hidden_layer, keep_prob)
 
-        print "Epoch:", (epoch + 1), "cost =", "{:.5f}".format(avg_cost)
+        with tf.name_scope('fullyc_2'):
+            W_fc2 = weight_variable([1024, 11])
+            b_fc2 = bias_variable([11])
 
-    print "\nTraining complete!"
+            output_layer = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
+
+        return output_layer, keep_prob
+
+    output_layer, keep_prob = deepnn(x_image)
+
+    with tf.name_scope('total'):
+        #output_layer = tf.nn.softmax(output_layer)
+        #cross_entropy = tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(output_layer), reduction_indices=[1]))
+        cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=output_layer, labels=_y))
+
+    tf.summary.scalar('cross_entropy', cross_entropy)
+
+    with tf.name_scope('train'):
+        optimizer = tf.train.GradientDescentOptimizer(LEARNING_RATE).minimize(cross_entropy)
+        #optimizer = tf.train.AdamOptimizer(learning_rate=0.01).minimize(cross_entropy)
 
     # find predictions on val set
-    pred_temp = tf.equal(tf.argmax(output_layer, 1), tf.argmax(y, 1))
-    accuracy = tf.reduce_mean(tf.cast(pred_temp, "float"))
-    print "Validation Accuracy:", accuracy.eval({x: val_x.reshape(-1, input_num_units), y: dense_to_one_hot(val_y)})
+    with tf.name_scope('accuracy'):
+        with tf.name_scope('correct_prediction'):
+            pred_temp = tf.equal(tf.argmax(output_layer, 1), tf.argmax(_y, 1))
+        with tf.name_scope('accuracy'):
+            accuracy = tf.reduce_mean(tf.cast(pred_temp, tf.float32))
 
-    predict = tf.argmax(output_layer, 1)
-    #pred = predict.eval({x: test_x.reshape(-1, input_num_units)})
+    tf.summary.scalar('accuracy', accuracy)
+
+    def feed_dict(train):
+        if train: #or FLAGS.fake_data:
+            batch_x, batch_y = batch_creator(FLAGS.batch_size, 'train')
+            k = FLAGS.dropout
+        else:
+            batch_x, batch_y = batch_creator(FLAGS.batch_size, 'test')
+            k = 1.0
+        return {_x: batch_x, _y: batch_y, keep_prob: k}
+
+    merged = tf.summary.merge_all()
+
+    return merged, accuracy, optimizer, feed_dict
+
+
+def main():
+    sess = tf.InteractiveSession()
+
+    merged, accuracy, optimizer, feed_dict = train_model()
+
+    train_writer = tf.summary.FileWriter(FLAGS.summaries_dir + '/train', sess.graph)
+    test_writer = tf.summary.FileWriter(FLAGS.summaries_dir + '/test')
+
+    # Add ops to save and restore all the variables.
+    saver = tf.train.Saver()
+
+    tf.global_variables_initializer().run()
+
+    for step in range(FLAGS.epochs):
+        if step % 40 == 0:  # Record summaries and test-set accuracy
+            summary, acc = sess.run([merged, accuracy], feed_dict=feed_dict(False))
+            test_writer.add_summary(summary, step)
+            print('Accuracy at step %s: %s' % (step, acc))
+        else:
+            #total_batch = int(train.shape[0] / FLAGS.batch_size)
+            #for i in range(total_batch):
+            if step % 1000 == 9:  # Record execution stats
+                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                run_metadata = tf.RunMetadata()
+                summary, _ = sess.run([merged, optimizer],
+                                      feed_dict=feed_dict(True),
+                                      options=run_options,
+                                      run_metadata=run_metadata)
+                train_writer.add_run_metadata(run_metadata, 'step%03d' % step)
+                train_writer.add_summary(summary, step)
+                print('Adding run metadata for', step)
+            else:  # Record a summary
+                summary, _ = sess.run([merged, optimizer], feed_dict=feed_dict(True))
+                train_writer.add_summary(summary, step)
+
+    print ("\nTraining complete!")
+
+    save_path = saver.save(sess, os.path.join(FLAGS.summaries_dir, "model.ckpt"))
+    print("Model saved in file: %s" % save_path)
+
+    train_writer.close()
+    test_writer.close()
+
+
+if __name__ == '__main__':
+    main()
