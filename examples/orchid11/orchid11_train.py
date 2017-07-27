@@ -1,6 +1,9 @@
 import os
 import tensorflow as tf
 import orchid11
+import orchid11_input
+
+FLAGS = tf.app.flags.FLAGS
 
 
 def main():
@@ -8,11 +11,11 @@ def main():
 
     # define placeholders
     with tf.name_scope('input'):
-        _x = tf.placeholder(tf.float32, [None, orchid11.IMAGE_BUFF_SIZE])
+        _x = tf.placeholder(tf.float32, [None, FLAGS.image_buff_size])
         _y = tf.placeholder(tf.float32, [None, 11])
 
     with tf.name_scope('input_reshape'):
-        x_image = tf.reshape(_x, [-1, orchid11.IMAGE_SIZE, orchid11.IMAGE_SIZE, orchid11.IMAGE_CHANNEL])
+        x_image = tf.reshape(_x, [-1, FLAGS.image_size, FLAGS.image_size, FLAGS.image_channels])
         tf.summary.image('input', x_image, 11)
 
     output_layer, keep_prob = orchid11.deepnn(x_image)
@@ -25,7 +28,7 @@ def main():
     tf.summary.scalar('cross_entropy', cross_entropy)
 
     with tf.name_scope('train'):
-        optimizer = tf.train.GradientDescentOptimizer(orchid11.LEARNING_RATE).minimize(cross_entropy)
+        optimizer = tf.train.GradientDescentOptimizer(FLAGS.learning_rate).minimize(cross_entropy)
         #optimizer = tf.train.AdamOptimizer(learning_rate=0.01).minimize(cross_entropy)
 
     # find predictions on val set
@@ -39,17 +42,17 @@ def main():
 
     merged = tf.summary.merge_all()
 
-    train_writer = tf.summary.FileWriter(orchid11.FLAGS.summaries_dir + '/train', sess.graph)
-    test_writer = tf.summary.FileWriter(orchid11.FLAGS.summaries_dir + '/test')
+    train_writer = tf.summary.FileWriter(FLAGS.orchid_summaries_dir + '/train', sess.graph)
+    test_writer = tf.summary.FileWriter(FLAGS.orchid_summaries_dir + '/test')
 
     # Add ops to save and restore all the variables.
     saver = tf.train.Saver()
 
     tf.global_variables_initializer().run()
 
-    for step in range(orchid11.FLAGS.epochs):
+    for step in range(FLAGS.epochs):
         if step % 40 == 0:  # Record summaries and test-set accuracy
-            summary, acc = sess.run([merged, accuracy], feed_dict=orchid11.feed_dict(False, _x, _y, keep_prob))
+            summary, acc = sess.run([merged, accuracy], feed_dict=orchid11_input.feed_dict(False, _x, _y, keep_prob))
             test_writer.add_summary(summary, step)
             print('Accuracy at step %s: %s' % (step, acc))
         else:
@@ -59,19 +62,19 @@ def main():
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
                 summary, _ = sess.run([merged, optimizer],
-                                      feed_dict=orchid11.feed_dict(True, _x, _y, keep_prob),
+                                      feed_dict=orchid11_input.feed_dict(True, _x, _y, keep_prob),
                                       options=run_options,
                                       run_metadata=run_metadata)
                 train_writer.add_run_metadata(run_metadata, 'step%03d' % step)
                 train_writer.add_summary(summary, step)
                 print('Adding run metadata for', step)
             else:  # Record a summary
-                summary, _ = sess.run([merged, optimizer], feed_dict=orchid11.feed_dict(True, _x, _y, keep_prob))
+                summary, _ = sess.run([merged, optimizer], feed_dict=orchid11_input.feed_dict(True, _x, _y, keep_prob))
                 train_writer.add_summary(summary, step)
 
     print ("\nTraining complete!")
 
-    save_path = saver.save(sess, os.path.join(orchid11.FLAGS.summaries_dir, "model.ckpt"))
+    save_path = saver.save(sess, os.path.join(FLAGS.orchid_summaries_dir, "model.ckpt"))
     print("Model saved in file: %s" % save_path)
 
     train_writer.close()

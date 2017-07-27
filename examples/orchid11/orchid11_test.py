@@ -1,7 +1,10 @@
 import os
 import tensorflow as tf
 import orchid11
+import orchid11_input
 from scipy.misc import imread
+
+FLAGS = tf.app.flags.FLAGS
 
 
 def main():
@@ -9,11 +12,11 @@ def main():
 
     # define placeholders
     with tf.name_scope('input'):
-        _x = tf.placeholder(tf.float32, [None, orchid11.IMAGE_BUFF_SIZE])
+        _x = tf.placeholder(tf.float32, [None, FLAGS.image_buff_size])
         _y = tf.placeholder(tf.float32, [None, 11])
 
     with tf.name_scope('input_reshape'):
-        x_image = tf.reshape(_x, [-1, orchid11.IMAGE_SIZE, orchid11.IMAGE_SIZE, orchid11.IMAGE_CHANNEL])
+        x_image = tf.reshape(_x, [-1, FLAGS.image_size, FLAGS.image_size, FLAGS.image_channels])
         tf.summary.image('input', x_image, 11)
 
     output_layer, keep_prob = orchid11.deepnn(x_image)
@@ -21,16 +24,16 @@ def main():
     # Add ops to save and restore all the variables.
     saver = tf.train.Saver()
 
-    saver.restore(sess, os.path.join(orchid11.FLAGS.summaries_dir, "model.ckpt"))
+    saver.restore(sess, os.path.join(FLAGS.summaries_dir, "model.ckpt"))
     print("Model restored.")
 
-    image_path = os.path.join(orchid11.FLAGS.data_dir, 'test/images' + str(orchid11.IMAGE_SIZE) + '/5_91.jpg')
+    image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/5_91.jpg')
     print (image_path)
 
     pd_img = imread(image_path, flatten=False)
     pd_img = pd_img.astype('float32')
-    pd_img = pd_img.reshape(-1, orchid11.IMAGE_BUFF_SIZE)
-    pd_img = orchid11.preproc(pd_img)
+    pd_img = pd_img.reshape(-1, FLAGS.image_buff_size)
+    pd_img = orchid11_input.preproc(pd_img)
 
     perc = output_layer.eval({_x: pd_img, keep_prob: 1.0})
 
