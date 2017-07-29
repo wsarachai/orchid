@@ -90,8 +90,8 @@ def deepnn(x_image):
         h_fc1_drop = tf.nn.dropout(hidden_layer, keep_prob)
 
     with tf.name_scope('fullyc_2'):
-        W_fc2 = weight_variable([1024, 11])
-        b_fc2 = bias_variable([11])
+        W_fc2 = weight_variable([1024, FLAGS.classes_num])
+        b_fc2 = bias_variable([FLAGS.classes_num])
 
         output_layer = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
 
