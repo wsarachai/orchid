@@ -2,20 +2,21 @@ import os
 import tensorflow as tf
 
 IMAGE_CHANNEL = 3
-IMAGE_SIZE = 32
+IMAGE_SIZE = 224
 IMAGE_BUFF_SIZE = IMAGE_SIZE*IMAGE_SIZE*IMAGE_CHANNEL
 
-BATCH_SIZE = 128
+BATCH_SIZE = 8
 LEARNING_RATE = 0.001
-EPOCHS = 100
+DROPOUT = 0.5
+EPOCHS = 15000
 
+#DATA_TYPE = 'ground-truth'
+DATA_TYPE = 'general'
 
-DATA_TYPE = 'ground-truth'
-#DATA_TYPE = 'general'
-
-ROOT_DIR = '/Users/sarachaii/Desktop/trains/'
+ROOT_DIR = '/home/keng/Desktop/trains/'
 DATASET_DIR = os.path.join(ROOT_DIR, 'dataset', DATA_TYPE)
-SUMMARIES_DIR = os.path.join(ROOT_DIR, 'logs', DATA_TYPE, 'summaries32')
+SUMMARIES = 'summaries' + str(IMAGE_SIZE)
+SUMMARIES_DIR = os.path.join(ROOT_DIR, 'logs', DATA_TYPE, SUMMARIES)
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -28,7 +29,7 @@ tf.app.flags.DEFINE_integer('image_size', IMAGE_SIZE, 'Image size')
 tf.app.flags.DEFINE_integer('image_buff_size', IMAGE_BUFF_SIZE, 'Image buffer size')
 tf.app.flags.DEFINE_integer('batch_size', BATCH_SIZE, 'Training batch size')
 tf.app.flags.DEFINE_integer('epochs', EPOCHS, 'Number of epochs')
-tf.app.flags.DEFINE_float('dropout', 0.5, 'Dropout rate.')
+tf.app.flags.DEFINE_float('dropout', DROPOUT, 'Dropout rate.')
 tf.app.flags.DEFINE_float('learning_rate', LEARNING_RATE, 'Learning rate.')
 
 # check for existence

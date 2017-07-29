@@ -27,7 +27,7 @@ def main():
     saver.restore(sess, os.path.join(FLAGS.summaries_dir, "model.ckpt"))
     print("Model restored.")
 
-    image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/5_91.jpg')
+    image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/6_92.jpg')
     print (image_path)
 
     pd_img = imread(image_path, flatten=False)
