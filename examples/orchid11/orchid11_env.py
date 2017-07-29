@@ -1,17 +1,23 @@
 import os
 import tensorflow as tf
 
-IMAGE_CHANNEL = 3
 IMAGE_SIZE = 224
+IMAGE_CHANNEL = 3
 IMAGE_BUFF_SIZE = IMAGE_SIZE*IMAGE_SIZE*IMAGE_CHANNEL
-
-BATCH_SIZE = 8
-LEARNING_RATE = 0.001
-DROPOUT = 0.5
-EPOCHS = 15000
 
 #DATA_TYPE = 'ground-truth'
 DATA_TYPE = 'general'
+
+if IMAGE_SIZE == 32:
+    BATCH_SIZE = 128
+    LEARNING_RATE = 0.001
+    DROPOUT = 0.5
+    EPOCHS = 20000
+elif IMAGE_SIZE == 224:
+    BATCH_SIZE = 22
+    LEARNING_RATE = 0.001
+    DROPOUT = 0.5
+    EPOCHS = 15000
 
 ROOT_DIR = '/home/keng/Desktop/trains/'
 DATASET_DIR = os.path.join(ROOT_DIR, 'dataset', DATA_TYPE)
