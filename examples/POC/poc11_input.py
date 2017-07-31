@@ -3,7 +3,7 @@ import cv2
 import math
 import numpy as np
 from scipy.special import cbrt
-from examples import sfta
+import sfta
 import tensorflow as tf
 import pandas as pd
 import poc11_env
@@ -136,5 +136,6 @@ def decode_image(var):
     return np.stack(temp)
 
 
-test_x = decode_image('test')
-train_x = decode_image('train')
+if not poc11_env.ON_TEST:
+    test_x = decode_image('test')
+    train_x = decode_image('train')

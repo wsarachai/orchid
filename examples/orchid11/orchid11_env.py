@@ -20,7 +20,8 @@ elif IMAGE_SIZE == 224:
     DROPOUT = 0.5
     EPOCHS = 15000
 
-ROOT_DIR = '/home/keng/Desktop/trains/'
+#ROOT_DIR = '/home/keng/Desktop/trains/'
+ROOT_DIR = '/Users/sarachaii/Desktop/trains/'
 DATASET_DIR = os.path.join(ROOT_DIR, 'dataset', DATA_TYPE)
 SUMMARIES = 'summaries' + str(IMAGE_SIZE)
 SUMMARIES_DIR = os.path.join(ROOT_DIR, 'logs', DATA_TYPE, SUMMARIES)

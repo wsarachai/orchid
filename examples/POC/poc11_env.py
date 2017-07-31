@@ -4,7 +4,8 @@ import tensorflow as tf
 IMAGE_SIZE = 224
 CLASS_NUM = 11
 IMAGE_BUFF_SIZE = 81
-HIDDEN_NEURON = 512
+HIDDEN_NEURON = 1024
+ON_TEST = False
 
 DATA_TYPE = 'ground-truth'
 #DATA_TYPE = 'general'
@@ -16,7 +17,7 @@ if IMAGE_SIZE == 32:
 elif IMAGE_SIZE == 224:
     BATCH_SIZE = 400
     LEARNING_RATE = 0.001
-    EPOCHS = 50000
+    EPOCHS = 20000
 
 ROOT_DIR = '/Users/sarachaii/Desktop/trains/'
 DATASET_DIR = os.path.join(ROOT_DIR, 'dataset', DATA_TYPE)

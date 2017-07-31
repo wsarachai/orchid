@@ -1,9 +1,10 @@
 import os
 import tensorflow as tf
 import poc11
-import poc11_input
 import poc11_env
-from scipy.misc import imread
+
+poc11_env.ON_TEST = True
+import poc11_input
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -12,9 +13,9 @@ def main():
     sess = tf.InteractiveSession()
 
     _x = tf.placeholder(tf.float32, [None, FLAGS.image_buff_size])
-    _y = tf.placeholder(tf.float32, [None, poc11_env.CLASS_NUM])
+    #_y = tf.placeholder(tf.float32, [None, poc11_env.CLASS_NUM])
 
-    output_layer, keep_prob = poc11.MLP(_x)
+    output_layer = poc11.MLP(_x)
 
     # Add ops to save and restore all the variables.
     saver = tf.train.Saver()
@@ -22,11 +23,15 @@ def main():
     saver.restore(sess, os.path.join(FLAGS.summaries_dir, "model.ckpt"))
     print("Model restored.")
 
-    image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/6_92.jpg')
+    #image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/6_99.jpg')
+    #image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/8_100.jpg')
+    image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/10_100.jpg')
+
     print (image_path)
 
     vc_img = poc11_input.get_vactors(image_path)
-    #vc_img = poc11_input.preproc(vc_img)
+    vc_img = vc_img.reshape(-1, FLAGS.image_buff_size)
+    vc_img = poc11_input.preproc(vc_img)
 
     perc = output_layer.eval({_x: vc_img})
 
