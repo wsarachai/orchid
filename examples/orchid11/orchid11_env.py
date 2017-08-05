@@ -1,7 +1,7 @@
 import os
 import tensorflow as tf
 
-IMAGE_SIZE = 224
+IMAGE_SIZE = 32
 IMAGE_CHANNEL = 3
 IMAGE_BUFF_SIZE = IMAGE_SIZE*IMAGE_SIZE*IMAGE_CHANNEL
 CLASSES_NUM = 11
@@ -21,9 +21,9 @@ elif IMAGE_SIZE == 224:
     EPOCHS = 15000
 
 #ROOT_DIR = '/home/keng/Desktop/trains/'
-ROOT_DIR = '/Users/sarachaii/Desktop/trains/'
+ROOT_DIR = '/Volumes/Data/_Corpus-data/Orchids/orchid11/trains/'
 DATASET_DIR = os.path.join(ROOT_DIR, 'dataset', DATA_TYPE)
-SUMMARIES = 'summaries' + str(IMAGE_SIZE)
+SUMMARIES = 'summaries_' + str(IMAGE_SIZE)
 SUMMARIES_DIR = os.path.join(ROOT_DIR, 'logs', DATA_TYPE, SUMMARIES)
 
 FLAGS = tf.app.flags.FLAGS

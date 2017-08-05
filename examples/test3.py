@@ -1,26 +1,30 @@
 import os
-import shutil
-from PIL import Image
-import glob
+import numpy as np
+import skimage.io as io
+import matplotlib.pyplot as plt
+import PreProcess
+import tensorflow as tf
 
-SRC_DIR = '/Users/sarachaii/Desktop/trains/resized224/train/'
-DST_DIR = '/Users/sarachaii/Desktop/trains/resized224-jpg/'
+DATA_TYPE = 'general'
+DATA_SIZE = 224
 
-TRAIN_DIR = os.path.join(DST_DIR, 'train')
-TEST_DIR = os.path.join(DST_DIR, 'test')
+ROOT_DIR = '/Volumes/Data/_Corpus-data/Orchids/orchid11/trains/'
+DATASET_DIR = os.path.join(ROOT_DIR, 'dataset', DATA_TYPE)
 
-if os.path.isdir(DST_DIR):
-    shutil.rmtree(DST_DIR)
+image_path = os.path.join(DATASET_DIR, 'test/images' + str(DATA_SIZE) + '/5_100.jpg')
+tfrecords_filename = os.path.join(DATASET_DIR, 'orchid11.tfrecords')
 
-os.mkdir(DST_DIR)
+writer = tf.python_io.TFRecordWriter(tfrecords_filename)
 
-files = glob.glob(SRC_DIR + "/*.png")
+cat_img = io.imread(image_path)
+#io.imshow(cat_img)
 
-for file in files:
-    with open(file, 'r+b') as f:
-        with Image.open(f) as img:
-            h, l = os.path.split(file)
-            l = l.split('.')[0] + '.jpg'
-            save_file = os.path.join(DST_DIR, l)
-            rgb_im = img.convert('RGB')
-            rgb_im.save(save_file)
+cat_string = cat_img.tostring()
+
+reconstructed_cat_1d = np.fromstring(cat_string, dtype=np.uint8)
+
+reconstructed_cat_img = reconstructed_cat_1d.reshape(cat_img.shape)
+
+print np.allclose(cat_img, reconstructed_cat_img)
+
+#plt.show()

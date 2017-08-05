@@ -1,6 +1,7 @@
 import os
 import tensorflow as tf
 import orchid11
+import orchid11_env
 import orchid11_input
 from scipy.misc import imread
 
@@ -24,10 +25,11 @@ def main():
     # Add ops to save and restore all the variables.
     saver = tf.train.Saver()
 
-    saver.restore(sess, os.path.join(FLAGS.summaries_dir, "model.ckpt"))
+    SUMMARIES_DIR = os.path.join('/Users/sarachaii/Desktop/trains/logs', orchid11_env.DATA_TYPE, orchid11_env.SUMMARIES)
+    saver.restore(sess, os.path.join(SUMMARIES_DIR, "model.ckpt"))
     print("Model restored.")
 
-    image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/2_100.jpg')
+    image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/5_100.jpg')
     print (image_path)
 
     pd_img = imread(image_path, flatten=False)

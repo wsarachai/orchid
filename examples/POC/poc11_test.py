@@ -20,12 +20,13 @@ def main():
     # Add ops to save and restore all the variables.
     saver = tf.train.Saver()
 
-    saver.restore(sess, os.path.join(FLAGS.summaries_dir, "model.ckpt"))
+    SUMMARIES_DIR = os.path.join('/Users/sarachaii/Desktop/trains/poc11-logs', poc11_env.DATA_TYPE, poc11_env.SUMMARIES)
+    saver.restore(sess, os.path.join(SUMMARIES_DIR, "model.ckpt"))
     print("Model restored.")
 
     #image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/6_99.jpg')
     #image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/8_100.jpg')
-    image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/10_100.jpg')
+    image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/5_100.jpg')
 
     print (image_path)
 

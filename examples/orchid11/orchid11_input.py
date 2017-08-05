@@ -50,16 +50,6 @@ def batch_creator(dataset_name):
     return batch_x, batch_y
 
 
-def feed_dict(train, _x, _y, keep_prob):
-    if train: #or FLAGS.fake_data:
-        batch_x, batch_y = batch_creator('train')
-        k = FLAGS.dropout
-    else:
-        batch_x, batch_y = batch_creator('test')
-        k = 1.0
-    return {_x: batch_x, _y: batch_y, keep_prob: k}
-
-
 def decode_image(var):
     with tf.Session() as sess:
         temp = []

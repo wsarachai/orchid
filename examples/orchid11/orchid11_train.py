@@ -2,6 +2,7 @@ import os
 import tensorflow as tf
 import orchid11
 import orchid11_input
+import orchid11_dataset
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -50,26 +51,37 @@ def main():
 
     tf.global_variables_initializer().run()
 
+    use_new_dataset = False
+    if use_new_dataset:
+        ord11 = orchid11_dataset.read_data_sets(one_hot=True)
+
     for step in range(FLAGS.epochs):
         if step % 40 == 0:  # Record summaries and test-set accuracy
-            summary, acc = sess.run([merged, accuracy], feed_dict=orchid11_input.feed_dict(False, _x, _y, keep_prob))
+            if use_new_dataset:
+                batch_x, batch_y = ord11.validation.next_batch(FLAGS.batch_size)
+            else:
+                batch_x, batch_y = orchid11_input.batch_creator('test')
+            summary, acc = sess.run([merged, accuracy], feed_dict={_x: batch_x, _y: batch_y, keep_prob: 1.0})
             test_writer.add_summary(summary, step)
             print('Accuracy at step %s: %s' % (step, acc))
         else:
-            #total_batch = int(train.shape[0] / FLAGS.batch_size)
-            #for i in range(total_batch):
+            if use_new_dataset:
+                batch_x, batch_y = ord11.train.next_batch(FLAGS.batch_size)
+            else:
+                batch_x, batch_y = orchid11_input.batch_creator('train')
+
             if step % 1000 == 9:  # Record execution stats
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
                 summary, _ = sess.run([merged, optimizer],
-                                      feed_dict=orchid11_input.feed_dict(True, _x, _y, keep_prob),
+                                      feed_dict={_x: batch_x, _y: batch_y, keep_prob: FLAGS.dropout},
                                       options=run_options,
                                       run_metadata=run_metadata)
                 train_writer.add_run_metadata(run_metadata, 'step%03d' % step)
                 train_writer.add_summary(summary, step)
                 print('Adding run metadata for', step)
             else:  # Record a summary
-                summary, _ = sess.run([merged, optimizer], feed_dict=orchid11_input.feed_dict(True, _x, _y, keep_prob))
+                summary, _ = sess.run([merged, optimizer], feed_dict={_x: batch_x, _y: batch_y, keep_prob: FLAGS.dropout})
                 train_writer.add_summary(summary, step)
 
     print ("\nTraining complete!")

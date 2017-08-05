@@ -19,7 +19,8 @@ elif IMAGE_SIZE == 224:
     LEARNING_RATE = 0.001
     EPOCHS = 20000
 
-ROOT_DIR = '/Users/sarachaii/Desktop/trains/'
+#ROOT_DIR = '/Users/sarachaii/Desktop/trains/'
+ROOT_DIR = '/Volumes/Data/_Corpus-data/Orchids/orchid11/trains/'
 DATASET_DIR = os.path.join(ROOT_DIR, 'dataset', DATA_TYPE)
 SUMMARIES = 'summaries' + str(IMAGE_SIZE)
 SUMMARIES_DIR = os.path.join(ROOT_DIR, 'poc11-logs', DATA_TYPE, SUMMARIES)

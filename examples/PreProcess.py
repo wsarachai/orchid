@@ -5,7 +5,6 @@ Module which contains functions for pre-processing image data
 import math
 import os
 import tensorflow as tf
-import pandas as pd
 import numpy as np
 from scipy import misc
 import CONSTANTS
