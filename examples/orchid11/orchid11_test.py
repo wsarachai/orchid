@@ -22,6 +22,13 @@ def main():
 
     output_layer, keep_prob = orchid11.deepnn(x_image)
 
+    # find predictions on val set
+    with tf.name_scope('accuracy'):
+        with tf.name_scope('correct_prediction'):
+            pred_temp = tf.equal(tf.argmax(output_layer, 1), tf.argmax(_y, 1))
+        with tf.name_scope('accuracy'):
+            accuracy = tf.reduce_mean(tf.cast(pred_temp, tf.float32))
+
     # Add ops to save and restore all the variables.
     saver = tf.train.Saver()
 
@@ -29,7 +36,12 @@ def main():
     saver.restore(sess, os.path.join(SUMMARIES_DIR, "model.ckpt"))
     print("Model restored.")
 
-    image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/5_100.jpg')
+    batch_x, batch_y = orchid11_input.batch_creator('test')
+    acc = sess.run([accuracy], feed_dict={_x: batch_x, _y: batch_y, keep_prob: 1.0})
+    print('Accuracy is {0:2.2f}%'.format(acc[0]*100))
+
+    image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/5_88.jpg')
+    #image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/9_100.jpg')
     print (image_path)
 
     pd_img = imread(image_path, flatten=False)

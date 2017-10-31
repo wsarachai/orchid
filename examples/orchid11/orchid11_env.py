@@ -1,13 +1,13 @@
 import os
 import tensorflow as tf
 
-IMAGE_SIZE = 32
+IMAGE_SIZE = 224
 IMAGE_CHANNEL = 3
 IMAGE_BUFF_SIZE = IMAGE_SIZE*IMAGE_SIZE*IMAGE_CHANNEL
 CLASSES_NUM = 11
 
-#DATA_TYPE = 'ground-truth'
-DATA_TYPE = 'general'
+DATA_TYPE = 'ground-truth'
+#DATA_TYPE = 'general'
 
 if IMAGE_SIZE == 32:
     BATCH_SIZE = CLASSES_NUM * 16
@@ -23,7 +23,7 @@ elif IMAGE_SIZE == 224:
 #ROOT_DIR = '/home/keng/Desktop/trains/'
 ROOT_DIR = '/Volumes/Data/_Corpus-data/Orchids/orchid11/trains/'
 DATASET_DIR = os.path.join(ROOT_DIR, 'dataset', DATA_TYPE)
-SUMMARIES = 'summaries_' + str(IMAGE_SIZE)
+SUMMARIES = 'summaries' + str(IMAGE_SIZE)
 SUMMARIES_DIR = os.path.join(ROOT_DIR, 'logs', DATA_TYPE, SUMMARIES)
 
 FLAGS = tf.app.flags.FLAGS

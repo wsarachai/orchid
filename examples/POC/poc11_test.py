@@ -13,9 +13,16 @@ def main():
     sess = tf.InteractiveSession()
 
     _x = tf.placeholder(tf.float32, [None, FLAGS.image_buff_size])
-    #_y = tf.placeholder(tf.float32, [None, poc11_env.CLASS_NUM])
+    _y = tf.placeholder(tf.float32, [None, poc11_env.CLASS_NUM])
 
     output_layer = poc11.MLP(_x)
+
+    # find predictions on val set
+    with tf.name_scope('accuracy'):
+        with tf.name_scope('correct_prediction'):
+            pred_temp = tf.equal(tf.argmax(output_layer, 1), tf.argmax(_y, 1))
+        with tf.name_scope('accuracy'):
+            accuracy = tf.reduce_mean(tf.cast(pred_temp, tf.float32))
 
     # Add ops to save and restore all the variables.
     saver = tf.train.Saver()
@@ -24,9 +31,12 @@ def main():
     saver.restore(sess, os.path.join(SUMMARIES_DIR, "model.ckpt"))
     print("Model restored.")
 
+    acc = sess.run([accuracy], feed_dict=poc11_input.feed_dict(False, _x, _y))
+    print('Accuracy is {0:2.2f}%'.format(acc[0]*100))
+
     #image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/6_99.jpg')
-    #image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/8_100.jpg')
-    image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/5_100.jpg')
+    image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/8_100.jpg')
+    #image_path = os.path.join(FLAGS.dataset_dir, 'test/images' + str(FLAGS.image_size) + '/9_100.jpg')
 
     print (image_path)
 

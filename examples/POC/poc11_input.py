@@ -135,7 +135,6 @@ def decode_image(var):
 
     return np.stack(temp)
 
-
+test_x = decode_image('test')
 if not poc11_env.ON_TEST:
-    test_x = decode_image('test')
     train_x = decode_image('train')
