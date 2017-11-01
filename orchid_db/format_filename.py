@@ -65,8 +65,10 @@ def modifyName(image_dir):
       tf.logging.warning('No files found')
       continue
 
-    label_name = re.sub(r'[^a-z0-9]+', ' ', dir_name.lower())
-    label_name = re.sub(r'[ ]', '-', label_name)
+    #label_name = re.sub(r'[^a-z0-9]+', ' ', dir_name.lower())
+    #label_name = re.sub(r'[ ]', '-', label_name)
+
+    label_name = dir_name.lower()
 
     fid = 1
 
@@ -79,4 +81,5 @@ def modifyName(image_dir):
 
 if __name__ == "__main__":
   #modifyName('/Volumes/Data/_Corpus-data/orchid-3-type/flower_photos/')
-  modifyName('/Volumes/Data/_Corpus-data/orchids/pre-collect-data/dendrobium')
+  #modifyName('/Volumes/Data/_Corpus-data/orchids/pre-collect-data/dendrobium')
+  modifyName('/Volumes/Data/_Corpus-data/orchids/all-orchid-dataset')

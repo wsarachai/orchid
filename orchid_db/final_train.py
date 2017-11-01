@@ -63,6 +63,7 @@ def read_tensor_from_image_file(file_name, input_height=299, input_width=299, in
 
   return result
 
+
 def load_labels(label_file):
   label = []
   proto_as_ascii_lines = tf.gfile.GFile(label_file).readlines()
@@ -80,7 +81,8 @@ if __name__ == "__main__":
   #file_name = "/Volumes/Data/_Corpus-data/orchid-bulbophyllum_001/flower_photos/auricomum Lindl./auricomum-lindl-_038.jpg"
   file_name = "/Volumes/Data/_Corpus-data/orchid-bulbophyllum_001/flower_photos/lasiochilum Par. & Rchb.f./lasiochilum-par-rchb-f-_013.jpg"
 
-  model_file = "/Volumes/Data/_Corpus-data/orchid-paphiopedilum_001/output_graph.pb"
+  #model_file = "/Volumes/Data/_Corpus-data/orchid-paphiopedilum_001/output_graph.pb"
+  model_file = "/Volumes/Data/_Corpus-data/orchid_final/output_graph.pb"
   input_height = 299
   input_width = 299
   input_mean = 128
