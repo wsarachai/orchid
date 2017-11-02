@@ -821,7 +821,8 @@ def train(role, model_info, image_lists, final_results, add_final_training_ops):
 
     save_graph_to_file(sess,
                        graph,
-                       os.path.join(FLAGS.model_dir, '{0}_output_graph.pb'.format(role)),
+                       FLAGS.output_graph,
+                       #os.path.join(FLAGS.model_dir, '{0}_output_graph.pb'.format(role)),
                        final_results)
 
 
@@ -1082,7 +1083,7 @@ def main(_):
         model_info['input_depth'], model_info['input_mean'],
         model_info['input_std'])
 
-      results, test_ground_truth, _ = (get_random_cached_bottlenecks(
+      results, test_ground_truth, test_filenames = (get_random_cached_bottlenecks(
           sess, all_image_lists, FLAGS.test_batch_size, 'testing',
           FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
           decoded_image_tensor, resized_input_tensor, final_result_tensor, 'test_all'))
@@ -1091,6 +1092,13 @@ def main(_):
         feed_dict={results_input: results, ground_truth_input: test_ground_truth})
 
       tf.logging.info('Final test accuracy = %.1f%% (N=%d)' % (test_accuracy * 100, len(results)))
+      misc = 0
+      tf.logging.info('=== MISCLASSIFIED TEST IMAGES ===')
+      for i, test_filename in enumerate(test_filenames):
+        if predictions[i] != test_ground_truth[i].argmax():
+          misc += 1
+          tf.logging.info('{0:70s}  {0}'.format(test_filename, list(all_image_lists.keys())[predictions[i]]))
+      tf.logging.info('Misclassified number: {0}/{1} images'.format(misc, len(results)))
 
   if FLAGS.running_method == 'predict':
     final_result_sensor = final_result + ':0'
@@ -1252,7 +1260,10 @@ if __name__ == '__main__':
       '--filename',
       type=str,
       #default='/Volumes/Data/_Corpus-data/orchid_final/flower_photos/bulbophyllum_dayanum Rchb_สิงโตขยุกขยุย/bulbophyllum_dayanum rchb_สิงโตขยุกขยุย_010.jpg',
-      default='/Volumes/Data/_Corpus-data/orchid_final/flower_photos/paphiopedilum_intanon-villosum_อินทนนท์/paphiopedilum_intanon-villosum_อินทนนท์_007.jpg',
+      #default='/Volumes/Data/_Corpus-data/orchid_final/flower_photos/paphiopedilum_intanon-villosum_อินทนนท์/paphiopedilum_intanon-villosum_อินทนนท์_007.jpg',
+      #default='/Volumes/Data/_Corpus-data/orchid_final/flower_photos/paphiopedilum_callosum_คางกบ/paphiopedilum_callosum_คางกบ_045.jpg',
+      #default='/Volumes/Data/_Corpus-data/orchid_final/flower_photos/dendrobium_lindleyi Steud_เอื้องผึ้ง/dendrobium_lindleyi steud_เอื้องผึ้ง_004.jpg',
+      default='/Volumes/Data/_Corpus-data/orchid_final/flower_photos/dendrobium_chrysotoxum Lindl_เอื้องคำ/dendrobium_chrysotoxum lindl_เอื้องคำ_004.jpg',
       help='The image file to predict.'
   )
   parser.add_argument(
