@@ -1,3 +1,6 @@
+#!/usr/local/bin/python
+# -*- coding: utf-8 -*-
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -593,7 +596,7 @@ def add_paphiopedilum_training_ops(class_count, final_tensor_name, bottleneck_te
   return (train_step, cross_entropy_mean, bottleneck_input, ground_truth_input, final_tensor)
 
 
-def add_final_training_svm(class_count, final_tensor_name, bottleneck_tensor, bottleneck_tensor_size):
+def add_final_training_ops(class_count, final_tensor_name, bottleneck_tensor, bottleneck_tensor_size):
   with tf.name_scope('input_final'):
     bottleneck_input = tf.placeholder_with_default(
       bottleneck_tensor,
@@ -604,30 +607,45 @@ def add_final_training_svm(class_count, final_tensor_name, bottleneck_tensor, bo
                                         [None, class_count],
                                         name='GroundTruthInput')
 
-  layer_name = 'final_training_SVM_ops'
+  layer_name = 'final_training_ops'
   with tf.name_scope(layer_name):
-    with tf.name_scope('weights'):
-      initial_value = tf.truncated_normal([bottleneck_tensor_size, class_count], stddev=0.001)
-      W = tf.Variable(initial_value, name='weights')
-      variable_summaries(W)
-    with tf.name_scope('biases'):
-      b = tf.Variable(tf.zeros([class_count]), name='biases')
-      variable_summaries(b)
-    with tf.name_scope('Wx_plus_b'):
-      final_tensor = tf.add(tf.matmul(bottleneck_input, W), b, name=final_tensor_name)
-      tf.summary.histogram('pre_activations', final_tensor)
+    with tf.name_scope('fullyc_1'):
+      with tf.name_scope('weights'):
+        initial_value = tf.truncated_normal([bottleneck_tensor_size, 1024], stddev=0.001)
+        fullyc_1_weights = tf.Variable(initial_value, name='weights')
+        variable_summaries(fullyc_1_weights)
+      with tf.name_scope('biases'):
+        fullyc_1_biases = tf.Variable(tf.zeros([1024]), name='biases')
+        variable_summaries(fullyc_1_biases)
+      with tf.name_scope('Wx_plus_b'):
+        fullyc_1_logits = tf.matmul(bottleneck_input, fullyc_1_weights) + fullyc_1_biases
+        tf.summary.histogram('pre_activations', fullyc_1_logits)
+        fullyc_1_hidden = tf.nn.relu(fullyc_1_logits)
 
-    with tf.name_scope('cross_entropy_final'):
-      cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=ground_truth_input, logits=final_tensor)
-      with tf.name_scope('total'):
-        cross_entropy_mean = tf.reduce_mean(cross_entropy)
-    tf.summary.scalar('cross_entropy', cross_entropy_mean)
+    with tf.name_scope('fullyc_2'):
+      with tf.name_scope('weights'):
+        initial_value = tf.truncated_normal([1024, class_count], stddev=0.001)
+        fullyc_2_weights = tf.Variable(initial_value, name='weights')
+        variable_summaries(fullyc_2_weights)
+      with tf.name_scope('biases'):
+        fullyc_2_biases = tf.Variable(tf.zeros([class_count]), name='biases')
+        variable_summaries(fullyc_2_biases)
+      with tf.name_scope('Wx_plus_b'):
+        fullyc_2_logits = tf.matmul(fullyc_1_hidden, fullyc_2_weights) + fullyc_2_biases
+        tf.summary.histogram('pre_activations', fullyc_2_logits)
+
+  final_tensor = tf.nn.softmax(fullyc_2_logits, name=final_tensor_name)
+  tf.summary.histogram('activations', final_tensor)
+
+  with tf.name_scope('cross_entropy'):
+    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=ground_truth_input, logits=fullyc_2_logits)
+    with tf.name_scope('total'):
+      cross_entropy_mean = tf.reduce_mean(cross_entropy)
+  tf.summary.scalar('cross_entropy', cross_entropy_mean)
 
   with tf.name_scope('train_final'):
-    regularization_loss = 0.5 * tf.reduce_sum(tf.square(W))
-    hinge_loss = tf.reduce_sum(tf.maximum(tf.zeros([FLAGS.train_batch_size, 1]), 1 - ground_truth_input * final_tensor));
-    svm_loss = regularization_loss + FLAGS.svmC * hinge_loss;
-    train_step = tf.train.GradientDescentOptimizer(FLAGS.learning_rate).minimize(svm_loss)
+    optimizer = tf.train.GradientDescentOptimizer(FLAGS.learning_rate)
+    train_step = optimizer.minimize(cross_entropy_mean)
 
   return (train_step, cross_entropy_mean, bottleneck_input, ground_truth_input, final_tensor)
 
@@ -801,7 +819,7 @@ def train(role, model_info, image_lists, final_results, add_final_training_ops):
 
     save_graph_to_file(sess,
                        graph,
-                       os.path.join(FLAGS.output_graph, '{0}_output_graph.pb'.format(role)),
+                       os.path.join(FLAGS.model_dir, '{0}_output_graph.pb'.format(role)),
                        final_results)
 
 
@@ -857,6 +875,7 @@ def main(_):
   final_result_bulbophyllum = 'final_result_bulbophyllum'
   final_result_dendrobium = 'final_result_dendrobium'
   final_result_paphiopedilum = 'final_result_paphiopedilum'
+  final_result = 'final_result'
 
   # Gather information about the model architecture we'll be using.
   model_info = {
@@ -931,7 +950,7 @@ def main(_):
     genus_tensor, \
     bulbophyllum_tensor, \
     dendrobium_tensor, \
-    paphiopedilum_tensor = load_graph(os.path.join(FLAGS.output_graph_path, 'paphiopedilum_output_graph.pb'),
+    paphiopedilum_tensor = load_graph(os.path.join(FLAGS.model_dir, 'paphiopedilum_output_graph.pb'),
                                       model_info['resized_input_tensor_name'],
                                       bottleneck_tensor_genus,
                                       bottleneck_tensor_bulbophyllum,
@@ -939,100 +958,104 @@ def main(_):
                                       bottleneck_tensor_paphiopedilum)
 
     with tf.Session(graph=graph) as sess:
+      bottleneck_tensor = tf.concat([genus_tensor, bulbophyllum_tensor, dendrobium_tensor, paphiopedilum_tensor], axis=1)
+
+      train_step, \
+      cross_entropy, \
+      bottleneck_input, \
+      ground_truth_input, \
+      final_tensor = add_final_training_ops(len(all_image_lists.keys()),
+                                            final_result,
+                                            bottleneck_tensor,
+                                            bottleneck_tensor_size=25)
+
       jpeg_data_tensor, decoded_image_tensor = add_jpeg_decoding(
         model_info['input_width'], model_info['input_height'],
         model_info['input_depth'], model_info['input_mean'],
         model_info['input_std'])
 
-      genus_tensor = tf.squeeze(genus_tensor)
-      bulbophyllum_tensor = tf.squeeze(bulbophyllum_tensor)
-      dendrobium_tensor = tf.squeeze(dendrobium_tensor)
-      paphiopedilum_tensor = tf.squeeze(paphiopedilum_tensor)
+      #image_path = '/Volumes/Data/_Corpus-data/orchid_final/flower_photos/bulbophyllum_auricomum Lindl_สิงโตตุ้มหูขาว/bulbophyllum_auricomum lindl_สิงโตตุ้มหูขาว_030.jpg'
+      #image_data = gfile.FastGFile(image_path, 'rb').read()
 
-      bottleneck_tensor = tf.concat([genus_tensor, bulbophyllum_tensor, dendrobium_tensor, paphiopedilum_tensor], axis=0)
+      #bottleneck_values = run_bottleneck_on_image(
+      #  sess, image_data, jpeg_data_tensor, decoded_image_tensor,
+      #  resized_input_tensor, final_tensor)
+      #results = np.squeeze(bottleneck_values)
+      #print (results)
+
 
       train_bottlenecks, train_ground_truth, train_filenames = (get_random_cached_bottlenecks(
           sess, all_image_lists, FLAGS.train_batch_size, 'training',
           FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
           decoded_image_tensor, resized_input_tensor, bottleneck_tensor, 'final_input'))
 
-      train_step, \
-      cross_entropy, \
-      bottleneck_input, \
-      ground_truth_input, \
-      final_tensor = add_final_training_svm(len(all_image_lists.keys()),
-                                            'final_result',
-                                            bottleneck_tensor,
-                                            bottleneck_tensor_size=25)
+      #predicted_class = tf.sign(final_tensor);
+      evaluation_step, prediction = add_evaluation_step('final_accuracy', final_tensor, ground_truth_input)
 
-      predicted_class = tf.sign(final_tensor);
-      evaluation_step, prediction = add_evaluation_step('final_accuracy', predicted_class, ground_truth_input)
+      merged = tf.summary.merge_all()
+      train_writer = tf.summary.FileWriter(FLAGS.summaries_dir + '/final_train', sess.graph)
+      validation_writer = tf.summary.FileWriter(FLAGS.summaries_dir + '/final_validation')
 
-      with tf.Session() as sess:
-        merged = tf.summary.merge_all()
-        train_writer = tf.summary.FileWriter(FLAGS.summaries_dir + '/final_train', sess.graph)
-        validation_writer = tf.summary.FileWriter(FLAGS.summaries_dir + '/final_validation')
+      init = tf.global_variables_initializer()
+      sess.run(init)
 
-        init = tf.global_variables_initializer()
-        sess.run(init)
+      # Iterate and train.
+      for step in range(FLAGS.how_many_training_steps):
+        train_summary, _ = sess.run(
+          [merged, train_step],
+          feed_dict={bottleneck_input: train_bottlenecks,
+                     ground_truth_input: train_ground_truth})
+        train_writer.add_summary(train_summary, step)
 
-        # Iterate and train.
-        for step in range(FLAGS.how_many_training_steps):
-          train_summary, _ = sess.run(
-            [merged, train_step],
-            feed_dict={bottleneck_input: train_bottlenecks,
-                       ground_truth_input: train_ground_truth})
-          train_writer.add_summary(train_summary, step)
+        is_last_step = (step + 1 == FLAGS.how_many_training_steps)
+        if (step % FLAGS.eval_step_interval) == 0 or is_last_step:
+          train_accuracy, cross_entropy_value = sess.run(
+              [evaluation_step, cross_entropy],
+              feed_dict={bottleneck_input: train_bottlenecks,
+                         ground_truth_input: train_ground_truth})
+          tf.logging.info('%s: Step %d: Train accuracy = %.1f%%' % (datetime.now(), step, train_accuracy * 100))
+          tf.logging.info('%s: Step %d: Cross entropy = %f' % (datetime.now(), step, cross_entropy_value))
 
-          is_last_step = (step + 1 == FLAGS.how_many_training_steps)
-          if (step % FLAGS.eval_step_interval) == 0 or is_last_step:
-            train_accuracy, cross_entropy_value = sess.run(
-                [evaluation_step, cross_entropy],
-                feed_dict={bottleneck_input: train_bottlenecks,
-                           ground_truth_input: train_ground_truth})
-            tf.logging.info('%s: Step %d: Train accuracy = %.1f%%' % (datetime.now(), step, train_accuracy * 100))
-            tf.logging.info('%s: Step %d: Cross entropy = %f' % (datetime.now(), step, cross_entropy_value))
-
-            validation_bottlenecks, validation_ground_truth, _ = (
-                get_random_cached_bottlenecks(
-                    sess, all_image_lists, FLAGS.validation_batch_size, 'validation',
-                    FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
-                    decoded_image_tensor, resized_input_tensor, bottleneck_tensor, 'final_input'))
-
-            validation_summary, validation_accuracy = sess.run(
-              [merged, evaluation_step],
-              feed_dict={bottleneck_input: validation_bottlenecks,
-                         ground_truth_input: validation_ground_truth})
-            validation_writer.add_summary(validation_summary, step)
-
-            tf.logging.info('%s: Step %d: Validation accuracy = %.1f%% (N=%d)' %
-                            (datetime.now(), step, validation_accuracy * 100,
-                             len(validation_bottlenecks)))
-
-            test_bottlenecks, test_ground_truth, test_filenames = (
+          validation_bottlenecks, validation_ground_truth, _ = (
               get_random_cached_bottlenecks(
-                sess, all_image_lists, FLAGS.test_batch_size, 'testing',
-                FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
-                decoded_image_tensor, resized_input_tensor, bottleneck_tensor))
+                  sess, all_image_lists, FLAGS.validation_batch_size, 'validation',
+                  FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
+                  decoded_image_tensor, resized_input_tensor, bottleneck_tensor, 'final_input'))
 
-            test_accuracy, predictions = sess.run(
-              [evaluation_step, prediction],
-              feed_dict={bottleneck_input: test_bottlenecks, ground_truth_input: test_ground_truth})
-            tf.logging.info('Final test accuracy = %.1f%% (N=%d)' % (test_accuracy * 100, len(test_bottlenecks)))
+          validation_summary, validation_accuracy = sess.run(
+            [merged, evaluation_step],
+            feed_dict={bottleneck_input: validation_bottlenecks,
+                       ground_truth_input: validation_ground_truth})
+          validation_writer.add_summary(validation_summary, step)
 
-            if FLAGS.print_misclassified_test_images:
-              tf.logging.info('=== MISCLASSIFIED TEST IMAGES ===')
-              for i, test_filename in enumerate(test_filenames):
-                if predictions[i] != test_ground_truth[i].argmax():
-                  tf.logging.info('%70s  %s' % (test_filename, list(all_image_lists.keys())[predictions[i]]))
+          tf.logging.info('%s: Step %d: Validation accuracy = %.1f%% (N=%d)' %
+                          (datetime.now(), step, validation_accuracy * 100,
+                           len(validation_bottlenecks)))
 
-            with gfile.FastGFile('/Volumes/Data/_Corpus-data/orchid_final/models/final_labels.txt', 'w') as f:
-              f.write('\n'.join(all_image_lists.keys()) + '\n')
+          test_bottlenecks, test_ground_truth, test_filenames = (
+            get_random_cached_bottlenecks(
+              sess, all_image_lists, FLAGS.test_batch_size, 'testing',
+              FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
+              decoded_image_tensor, resized_input_tensor, bottleneck_tensor, 'final_input'))
 
-            save_graph_to_file(sess,
-                               graph,
-                               os.path.join(FLAGS.output_graph, 'final_output_graph.pb'),
-                               'final_result')
+          test_accuracy, predictions = sess.run(
+            [evaluation_step, prediction],
+            feed_dict={bottleneck_input: test_bottlenecks, ground_truth_input: test_ground_truth})
+          tf.logging.info('Final test accuracy = %.1f%% (N=%d)' % (test_accuracy * 100, len(test_bottlenecks)))
+
+      if FLAGS.print_misclassified_test_images:
+        tf.logging.info('=== MISCLASSIFIED TEST IMAGES ===')
+        for i, test_filename in enumerate(test_filenames):
+          if predictions[i] != test_ground_truth[i].argmax():
+            tf.logging.info('%70s  %s' % (test_filename, list(all_image_lists.keys())[predictions[i]]))
+
+      with gfile.FastGFile('/Volumes/Data/_Corpus-data/orchid_final/models/final_labels.txt', 'w') as f:
+        f.write('\n'.join(all_image_lists.keys()) + '\n')
+
+      save_graph_to_file(sess,
+                         graph,
+                         os.path.join(FLAGS.model_dir, 'final_output_graph.pb'),
+                         final_result)
 
   if FLAGS.running_method == 'test_all':
     workspace = '/Volumes/Data/_Corpus-data/orchid_final'
@@ -1051,7 +1074,7 @@ def main(_):
     genus_tensor, \
     bulbophyllum_tensor, \
     dendrobium_tensor, \
-    paphiopedilum_tensor = load_graph(os.path.join(FLAGS.output_graph_path, 'paphiopedilum_output_graph.pb'),
+    paphiopedilum_tensor = load_graph(os.path.join(FLAGS.model_dir, 'paphiopedilum_output_graph.pb'),
                                       model_info['resized_input_tensor_name'],
                                       bottleneck_tensor_genus,
                                       bottleneck_tensor_bulbophyllum,
@@ -1146,13 +1169,13 @@ if __name__ == '__main__':
   parser.add_argument(
       '--how_many_training_steps',
       type=int,
-      default=20000,
+      default=40000,
       help='How many training steps to run before ending.'
   )
   parser.add_argument(
       '--learning_rate',
       type=float,
-      default=0.001,
+      default=0.01,
       help='How large a learning rate to use when training.'
   )
   parser.add_argument(
@@ -1206,9 +1229,9 @@ if __name__ == '__main__':
       help='Where to save the intermediate graphs.'
   )
   parser.add_argument(
-      '--output_graph_path',
+      '--output_graph',
       type=str,
-      default='/Volumes/Data/_Corpus-data/orchid_final/models',
+      default='/Volumes/Data/_Corpus-data/orchid_final/models/output_graph.pb',
       help='Where to save the trained graph.'
   )
   parser.add_argument(
