@@ -186,11 +186,11 @@ def ensure_dir_exists(dir_name):
     os.makedirs(dir_name)
 
 
-def prepare_file_system():
+def prepare_file_system(summaries_dir):
   # Setup the directory we'll write summaries to for TensorBoard
-  if tf.gfile.Exists(FLAGS.summaries_dir):
-    tf.gfile.DeleteRecursively(FLAGS.summaries_dir)
-  tf.gfile.MakeDirs(FLAGS.summaries_dir)
+  if tf.gfile.Exists(summaries_dir):
+    tf.gfile.DeleteRecursively(summaries_dir)
+  tf.gfile.MakeDirs(summaries_dir)
   if FLAGS.intermediate_store_frequency > 0:
     ensure_dir_exists(FLAGS.intermediate_output_graphs_dir)
   return
@@ -673,6 +673,8 @@ def get_random_cached_bottlenecks(sess, image_lists, how_many, category,
   if how_many >= 0:
     # Retrieve a random sample of bottlenecks.
     for unused_i in range(how_many):
+      if unused_i == 4:
+        unused_i = unused_i
       label_index = random.randrange(class_count)
       label_name = list(image_lists.keys())[label_index]
       image_index = random.randrange(MAX_NUM_IMAGES_PER_CLASS + 1)
@@ -831,35 +833,37 @@ def load_labels(label_file):
   return label
 
 
-def load_graph(model_path,
-               input_name,
-               bottleneck_tensor_genus,
-               bottleneck_tensor_bulbophyllum,
-               bottleneck_tensor_dendrobium,
-               bottleneck_tensor_paphiopedilum):
+def load_final_graph(model_path, final_output_tensors):
   with tf.Graph().as_default() as graph:
     with gfile.FastGFile(model_path, 'rb') as f:
       graph_def = tf.GraphDef()
       graph_def.ParseFromString(f.read())
       resized_input_tensor,\
-      genus_tensor,\
+      final_tensor,\
       bulbophyllum_tensor, \
       dendrobium_tensor, \
       paphiopedilum_tensor = (tf.import_graph_def(
         graph_def,
         name='',
-        return_elements=[
-          input_name,
-          bottleneck_tensor_genus,
-          bottleneck_tensor_bulbophyllum,
-          bottleneck_tensor_dendrobium,
-          bottleneck_tensor_paphiopedilum
-        ]))
+        return_elements=final_output_tensors))
   return graph, resized_input_tensor,\
-         genus_tensor,\
+         final_tensor,\
          bulbophyllum_tensor, \
          dendrobium_tensor, \
          paphiopedilum_tensor
+
+
+def load_test_graph(model_path, final_output_tensors):
+  with tf.Graph().as_default() as graph:
+    with gfile.FastGFile(model_path, 'rb') as f:
+      graph_def = tf.GraphDef()
+      graph_def.ParseFromString(f.read())
+      resized_input_tensor,\
+      final_tensor = (tf.import_graph_def(
+        graph_def,
+        name='',
+        return_elements=final_output_tensors))
+  return graph, resized_input_tensor, final_tensor
 
 
 def extend_arr(list, n):
@@ -875,7 +879,7 @@ def main(_):
   final_result_bulbophyllum = 'final_result_bulbophyllum'
   final_result_dendrobium = 'final_result_dendrobium'
   final_result_paphiopedilum = 'final_result_paphiopedilum'
-  final_result = 'final_result'
+  final_result = 'final_orchid_result'
 
   # Gather information about the model architecture we'll be using.
   model_info = {
@@ -893,15 +897,16 @@ def main(_):
     'input_std': 128,
   }
 
-  # Prepare necessary directories  that can be used during training
-  prepare_file_system()
-
   # Look at the folder structure, and create lists of all the images.
   all_image_lists, specie_image_list, genus_image_list,  = create_image_lists(FLAGS.image_dir, FLAGS.testing_percentage, FLAGS.validation_percentage)
 
+  if FLAGS.running_method == 'all_train':
+    prepare_file_system(FLAGS.summaries_dir)
 
   if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_genus':
     # genus train ##########################################################################
+    summaries_dir = os.path.join(FLAGS.summaries_dir, 'train_genus')
+    prepare_file_system(summaries_dir)
     train('genus',
           model_info,
           genus_image_list,
@@ -911,6 +916,8 @@ def main(_):
 
   if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_bulbophyllum':
     # bulbophyllum train ####################################################################
+    summaries_dir = os.path.join(FLAGS.summaries_dir, 'train_bulbophyllum')
+    prepare_file_system(summaries_dir)
     train('bulbophyllum',
           model_info,
           specie_image_list['bulbophyllum'],
@@ -919,6 +926,8 @@ def main(_):
 
   if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_dendrobium':
     # dendrobium train ######################################################################
+    summaries_dir = os.path.join(FLAGS.summaries_dir, 'train_dendrobium')
+    prepare_file_system(summaries_dir)
     train('dendrobium',
           model_info,
           specie_image_list['dendrobium'],
@@ -927,6 +936,8 @@ def main(_):
 
   if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_paphiopedilum':
     # paphiopedilum train ####################################################################
+    summaries_dir = os.path.join(FLAGS.summaries_dir, 'train_paphiopedilum')
+    prepare_file_system(summaries_dir)
     train('paphiopedilum',
           model_info,
           specie_image_list['paphiopedilum'],
@@ -934,12 +945,8 @@ def main(_):
           add_paphiopedilum_training_ops)
 
   if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_final':
-    workspace = '/Volumes/Data/_Corpus-data/orchid_final'
-    genus_labels = load_labels("{0}/models/{1}_labels.txt".format(workspace, 'genus'))
-    bulbophyllum_labels = load_labels("{0}/models/{1}_labels.txt".format(workspace, 'bulbophyllum'))
-    dendrobium_labels = load_labels("{0}/models/{1}_labels.txt".format(workspace, 'dendrobium'))
-    paphiopedilum_labels = load_labels("{0}/models/{1}_labels.txt".format(workspace, 'paphiopedilum'))
-
+    summaries_dir = os.path.join(FLAGS.summaries_dir, 'train_final')
+    prepare_file_system(summaries_dir)
     bottleneck_tensor_genus = final_result_genus + ':0'
     bottleneck_tensor_bulbophyllum = final_result_bulbophyllum + ':0'
     bottleneck_tensor_dendrobium = final_result_dendrobium + ':0'
@@ -950,12 +957,12 @@ def main(_):
     genus_tensor, \
     bulbophyllum_tensor, \
     dendrobium_tensor, \
-    paphiopedilum_tensor = load_graph(os.path.join(FLAGS.model_dir, 'paphiopedilum_output_graph.pb'),
-                                      model_info['resized_input_tensor_name'],
+    paphiopedilum_tensor = load_final_graph(os.path.join(FLAGS.model_dir, 'paphiopedilum_output_graph.pb'),
+                                      [model_info['resized_input_tensor_name'],
                                       bottleneck_tensor_genus,
                                       bottleneck_tensor_bulbophyllum,
                                       bottleneck_tensor_dendrobium,
-                                      bottleneck_tensor_paphiopedilum)
+                                      bottleneck_tensor_paphiopedilum])
 
     with tf.Session(graph=graph) as sess:
       bottleneck_tensor = tf.concat([genus_tensor, bulbophyllum_tensor, dendrobium_tensor, paphiopedilum_tensor], axis=1)
@@ -974,27 +981,16 @@ def main(_):
         model_info['input_depth'], model_info['input_mean'],
         model_info['input_std'])
 
-      #image_path = '/Volumes/Data/_Corpus-data/orchid_final/flower_photos/bulbophyllum_auricomum Lindl_สิงโตตุ้มหูขาว/bulbophyllum_auricomum lindl_สิงโตตุ้มหูขาว_030.jpg'
-      #image_data = gfile.FastGFile(image_path, 'rb').read()
-
-      #bottleneck_values = run_bottleneck_on_image(
-      #  sess, image_data, jpeg_data_tensor, decoded_image_tensor,
-      #  resized_input_tensor, final_tensor)
-      #results = np.squeeze(bottleneck_values)
-      #print (results)
-
-
       train_bottlenecks, train_ground_truth, train_filenames = (get_random_cached_bottlenecks(
           sess, all_image_lists, FLAGS.train_batch_size, 'training',
           FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
           decoded_image_tensor, resized_input_tensor, bottleneck_tensor, 'final_input'))
 
-      #predicted_class = tf.sign(final_tensor);
       evaluation_step, prediction = add_evaluation_step('final_accuracy', final_tensor, ground_truth_input)
 
       merged = tf.summary.merge_all()
-      train_writer = tf.summary.FileWriter(FLAGS.summaries_dir + '/final_train', sess.graph)
-      validation_writer = tf.summary.FileWriter(FLAGS.summaries_dir + '/final_validation')
+      train_writer = tf.summary.FileWriter(summaries_dir + '/final_train', sess.graph)
+      validation_writer = tf.summary.FileWriter(summaries_dir + '/final_validation')
 
       init = tf.global_variables_initializer()
       sess.run(init)
@@ -1055,31 +1051,57 @@ def main(_):
       save_graph_to_file(sess,
                          graph,
                          os.path.join(FLAGS.model_dir, 'final_output_graph.pb'),
-                         final_result)
+                         [final_result])
 
-  if FLAGS.running_method == 'test_all':
+  if FLAGS.running_method == 'accuracy':
+    final_result_sensor = final_result + ':0'
     workspace = '/Volumes/Data/_Corpus-data/orchid_final'
-    genus_labels = load_labels("{0}/models/{1}_labels.txt".format(workspace, 'genus'))
-    bulbophyllum_labels = load_labels("{0}/models/{1}_labels.txt".format(workspace, 'bulbophyllum'))
-    dendrobium_labels = load_labels("{0}/models/{1}_labels.txt".format(workspace, 'dendrobium'))
-    paphiopedilum_labels = load_labels("{0}/models/{1}_labels.txt".format(workspace, 'paphiopedilum'))
-
-    bottleneck_tensor_genus = final_result_genus + ':0'
-    bottleneck_tensor_bulbophyllum = final_result_bulbophyllum + ':0'
-    bottleneck_tensor_dendrobium = final_result_dendrobium + ':0'
-    bottleneck_tensor_paphiopedilum = final_result_paphiopedilum + ':0'
+    labels = load_labels("{0}/models/{1}_labels.txt".format(workspace, 'final'))
 
     graph, \
     resized_input_tensor, \
-    genus_tensor, \
-    bulbophyllum_tensor, \
-    dendrobium_tensor, \
-    paphiopedilum_tensor = load_graph(os.path.join(FLAGS.model_dir, 'paphiopedilum_output_graph.pb'),
-                                      model_info['resized_input_tensor_name'],
-                                      bottleneck_tensor_genus,
-                                      bottleneck_tensor_bulbophyllum,
-                                      bottleneck_tensor_dendrobium,
-                                      bottleneck_tensor_paphiopedilum)
+    final_result_tensor = load_test_graph(os.path.join(FLAGS.model_dir, FLAGS.input_graph),
+                                          [model_info['resized_input_tensor_name'],
+                                           final_result_sensor])
+
+    with tf.Session(graph=graph) as sess:
+      results_input = tf.placeholder(tf.float32,
+                                     [None, len(labels)],
+                                     name='ResultsInput')
+
+      ground_truth_input = tf.placeholder(tf.float32,
+                                          [None, len(labels)],
+                                          name='GroundTruthInput')
+
+      prediction = tf.argmax(results_input, 1)
+      correct_prediction = tf.equal(prediction, tf.argmax(ground_truth_input, 1))
+      evaluation = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+      jpeg_data_tensor, decoded_image_tensor = add_jpeg_decoding(
+        model_info['input_width'], model_info['input_height'],
+        model_info['input_depth'], model_info['input_mean'],
+        model_info['input_std'])
+
+      results, test_ground_truth, _ = (get_random_cached_bottlenecks(
+          sess, all_image_lists, FLAGS.test_batch_size, 'testing',
+          FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
+          decoded_image_tensor, resized_input_tensor, final_result_tensor, 'test_all'))
+
+      test_accuracy, predictions = sess.run([evaluation, prediction],
+        feed_dict={results_input: results, ground_truth_input: test_ground_truth})
+
+      tf.logging.info('Final test accuracy = %.1f%% (N=%d)' % (test_accuracy * 100, len(results)))
+
+  if FLAGS.running_method == 'predict':
+    final_result_sensor = final_result + ':0'
+    workspace = '/Volumes/Data/_Corpus-data/orchid_final'
+    labels = load_labels("{0}/models/{1}_labels.txt".format(workspace, 'final'))
+
+    graph, \
+    resized_input_tensor, \
+    final_result_tensor = load_test_graph(os.path.join(FLAGS.model_dir, FLAGS.input_graph),
+                                          [model_info['resized_input_tensor_name'],
+                                           final_result_sensor])
 
     with tf.Session(graph=graph) as sess:
       # Set up the image decoding sub-graph.
@@ -1088,32 +1110,18 @@ def main(_):
         model_info['input_depth'], model_info['input_mean'],
         model_info['input_std'])
 
-      genus_finals, test_ground_truth, test_filenames = (get_random_cached_bottlenecks(
-          sess, all_image_lists, FLAGS.test_batch_size, 'testing',
-          FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
-          decoded_image_tensor, resized_input_tensor, genus_tensor, 'genus'))
+      image_data = gfile.FastGFile(FLAGS.filename, 'rb').read()
 
+      try:
+        results = run_bottleneck_on_image(
+          sess, image_data, jpeg_data_tensor, decoded_image_tensor,
+          resized_input_tensor, final_result_tensor)
+      except Exception as e:
+        raise RuntimeError('Error during processing file %s (%s)' % (FLAGS.filename, str(e)))
 
-      lable_max = [len(paphiopedilum_labels), len(bulbophyllum_labels), len(dendrobium_labels)]
-      max = np.amax(lable_max, axis=0)
-
-      paphiopedilum_labels = extend_arr(paphiopedilum_labels, max)
-      bulbophyllum_labels = extend_arr(bulbophyllum_labels, max)
-      dendrobium_labels = extend_arr(dendrobium_labels, max)
-
-      genus_final_input = tf.placeholder(tf.float32, shape=(None, len(genus_labels)))
-
-      c1 = tf.equal(tf.argmax(genus_final_input, 0), 0)
-      c2 = tf.equal(tf.argmax(genus_final_input, 0), 1)
-      c3 = tf.equal(tf.argmax(genus_final_input, 0), 2)
-      a1 = lambda: (paphiopedilum_tensor, paphiopedilum_labels)
-      a2 = lambda: (bulbophyllum_tensor, bulbophyllum_labels)
-      a3 = lambda: (dendrobium_tensor, dendrobium_labels)
-      final_sensor, labels = tf.case([(c1, a1), (c2, a2), (c3, a3)], default=a1)
-
-      #results = sess.run(final_sensor, {resized_input_tensor: resized_input_values})
-
-      print (genus_finals)
+      top_k = results.argsort()[::-1]
+      for i in top_k:
+        print("{0} {1:.2f}".format(labels[i], results[i]))
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
@@ -1169,13 +1177,13 @@ if __name__ == '__main__':
   parser.add_argument(
       '--how_many_training_steps',
       type=int,
-      default=40000,
+      default=10,
       help='How many training steps to run before ending.'
   )
   parser.add_argument(
       '--learning_rate',
       type=float,
-      default=0.01,
+      default=0.001,
       help='How large a learning rate to use when training.'
   )
   parser.add_argument(
@@ -1235,17 +1243,25 @@ if __name__ == '__main__':
       help='Where to save the trained graph.'
   )
   parser.add_argument(
-      '--svmC',
-      type=int,
-      default=1,
-      help='The C parameter of the SVM cost function.'
+      '--input_graph',
+      type=str,
+      default='/Volumes/Data/_Corpus-data/orchid_final/models/final_output_graph_03.pb',
+      help='Where to save the trained graph.'
+  )
+  parser.add_argument(
+      '--filename',
+      type=str,
+      #default='/Volumes/Data/_Corpus-data/orchid_final/flower_photos/bulbophyllum_dayanum Rchb_สิงโตขยุกขยุย/bulbophyllum_dayanum rchb_สิงโตขยุกขยุย_010.jpg',
+      default='/Volumes/Data/_Corpus-data/orchid_final/flower_photos/paphiopedilum_intanon-villosum_อินทนนท์/paphiopedilum_intanon-villosum_อินทนนท์_007.jpg',
+      help='The image file to predict.'
   )
   parser.add_argument(
       '--running_method',
       type=str,
       #default='all_train',
-      #default='test_all',
-      default='train_final',
+      #default='train_final',
+      default='accuracy',
+      #default='predict',
       help="""\
       The training method 'add' to train all model otherwise \
       'genus' for genus training

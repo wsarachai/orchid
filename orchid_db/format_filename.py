@@ -15,6 +15,13 @@ def formatName(f, fid):
     return '{}_{:03d}{}'.format(f, fid, '.jpg')
 
 
+def delFile(filename):
+    try:
+      os.remove(filename)
+    # eg. source or destination doesn't exist
+    except IOError as e:
+        print('Error: %s' % e.strerror)
+
 
 def moveFile(src, dest):
     try:
@@ -79,7 +86,28 @@ def modifyName(image_dir):
       new_name = os.path.join(sub_dir, new_name)
       moveFile(f, new_name)
 
+
+def deletefile(bottleneck_dir):
+  sub_dirs = [x[0] for x in gfile.Walk(bottleneck_dir)]
+
+  is_root_dir = True
+  for sub_dir in sub_dirs:
+    if is_root_dir:
+      is_root_dir = False
+      continue
+
+    file_list = []
+    dir_name = os.path.basename(sub_dir)
+    file_glob = os.path.join(bottleneck_dir, dir_name, '*.txt')
+    file_list.extend(gfile.Glob(file_glob))
+
+    for f in file_list:
+      if f[-12:] == 'test_all.txt':
+        delFile(f)
+
+
 if __name__ == "__main__":
   #modifyName('/Volumes/Data/_Corpus-data/orchid-3-type/flower_photos/')
   #modifyName('/Volumes/Data/_Corpus-data/orchids/pre-collect-data/dendrobium')
-  modifyName('/Volumes/Data/_Corpus-data/orchids/all-orchid-dataset')
+  #modifyName('/Volumes/Data/_Corpus-data/orchids/all-orchid-dataset')
+  deletefile('/Volumes/Data/_Corpus-data/orchid_final/bottleneck')
