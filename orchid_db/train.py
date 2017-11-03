@@ -892,8 +892,11 @@ def resetBottleneck(architecture):
     file_glob = os.path.join(FLAGS.bottleneck_dir, dir_name, '*.txt')
     file_list.extend(gfile.Glob(file_glob))
 
+    l = len(architecture) + len('.txt')
+
     for f in file_list:
-      if f[-12:] == '{0}.txt'.format(architecture):
+      if f[-l:] == '{0}.txt'.format(architecture):
+        tf.logging.info('Remove file: {0}'.format(f))
         delFile(f)
 
 
@@ -1060,8 +1063,7 @@ def main(_):
                           (datetime.now(), step, validation_accuracy * 100,
                            len(validation_bottlenecks)))
 
-          test_bottlenecks, test_ground_truth, test_filenames = (
-            get_random_cached_bottlenecks(
+          test_bottlenecks, test_ground_truth, test_filenames = (get_random_cached_bottlenecks(
               sess, all_image_lists, FLAGS.test_batch_size, 'testing',
               FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
               decoded_image_tensor, resized_input_tensor, bottleneck_tensor, archetecture))
@@ -1234,7 +1236,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--learning_rate',
       type=float,
-      default=0.01,
+      default=0.03,
       help='How large a learning rate to use when training.'
   )
   parser.add_argument(
