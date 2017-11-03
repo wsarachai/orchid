@@ -1008,10 +1008,14 @@ def main(_):
         model_info['input_depth'], model_info['input_mean'],
         model_info['input_std'])
 
+      archetecture = 'final_input'
+      if FLAGS.reset_bottleneck:
+        resetBottleneck(archetecture)
+
       train_bottlenecks, train_ground_truth, train_filenames = (get_random_cached_bottlenecks(
           sess, all_image_lists, FLAGS.train_batch_size, 'training',
           FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
-          decoded_image_tensor, resized_input_tensor, bottleneck_tensor, 'final_input'))
+          decoded_image_tensor, resized_input_tensor, bottleneck_tensor, archetecture))
 
       evaluation_step, prediction = add_evaluation_step('final_accuracy', final_tensor, ground_truth_input)
 
@@ -1044,7 +1048,7 @@ def main(_):
               get_random_cached_bottlenecks(
                   sess, all_image_lists, FLAGS.validation_batch_size, 'validation',
                   FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
-                  decoded_image_tensor, resized_input_tensor, bottleneck_tensor, 'final_input'))
+                  decoded_image_tensor, resized_input_tensor, bottleneck_tensor, archetecture))
 
           validation_summary, validation_accuracy = sess.run(
             [merged, evaluation_step],
@@ -1060,7 +1064,7 @@ def main(_):
             get_random_cached_bottlenecks(
               sess, all_image_lists, FLAGS.test_batch_size, 'testing',
               FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
-              decoded_image_tensor, resized_input_tensor, bottleneck_tensor, 'final_input'))
+              decoded_image_tensor, resized_input_tensor, bottleneck_tensor, archetecture))
 
           test_summary, test_accuracy, predictions = sess.run(
             [merged, evaluation_step, prediction],
@@ -1224,13 +1228,13 @@ if __name__ == '__main__':
   parser.add_argument(
       '--how_many_training_steps',
       type=int,
-      default=10,
+      default=40000,
       help='How many training steps to run before ending.'
   )
   parser.add_argument(
       '--learning_rate',
       type=float,
-      default=0.001,
+      default=0.01,
       help='How large a learning rate to use when training.'
   )
   parser.add_argument(
@@ -1309,8 +1313,8 @@ if __name__ == '__main__':
       '--running_method',
       type=str,
       #default='all_train',
-      #default='train_final',
-      default='accuracy',
+      default='train_final',
+      #default='accuracy',
       #default='predict',
       help="""\
       The training method 'add' to train all model otherwise \
