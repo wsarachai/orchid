@@ -871,6 +871,32 @@ def extend_arr(list, n):
   return (list + [''] * (n - len(list)))[:n]
 
 
+def delFile(filename):
+    try:
+      os.remove(filename)
+    except IOError as e:
+        print('Error: %s' % e.strerror)
+
+
+def resetBottleneck(architecture):
+  sub_dirs = [x[0] for x in gfile.Walk(FLAGS.bottleneck_dir)]
+
+  is_root_dir = True
+  for sub_dir in sub_dirs:
+    if is_root_dir:
+      is_root_dir = False
+      continue
+
+    file_list = []
+    dir_name = os.path.basename(sub_dir)
+    file_glob = os.path.join(FLAGS.bottleneck_dir, dir_name, '*.txt')
+    file_list.extend(gfile.Glob(file_glob))
+
+    for f in file_list:
+      if f[-12:] == '{0}.txt'.format(architecture):
+        delFile(f)
+
+
 def main(_):
   # Needed to make sure the logging output is visible.
   # See https://github.com/tensorflow/tensorflow/issues/3047
@@ -992,6 +1018,7 @@ def main(_):
       merged = tf.summary.merge_all()
       train_writer = tf.summary.FileWriter(summaries_dir + '/final_train', sess.graph)
       validation_writer = tf.summary.FileWriter(summaries_dir + '/final_validation')
+      test_writer = tf.summary.FileWriter(summaries_dir + '/final_test')
 
       init = tf.global_variables_initializer()
       sess.run(init)
@@ -1035,9 +1062,10 @@ def main(_):
               FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
               decoded_image_tensor, resized_input_tensor, bottleneck_tensor, 'final_input'))
 
-          test_accuracy, predictions = sess.run(
-            [evaluation_step, prediction],
+          test_summary, test_accuracy, predictions = sess.run(
+            [merged, evaluation_step, prediction],
             feed_dict={bottleneck_input: test_bottlenecks, ground_truth_input: test_ground_truth})
+          test_writer.add_summary(test_summary, step)
           tf.logging.info('Final test accuracy = %.1f%% (N=%d)' % (test_accuracy * 100, len(test_bottlenecks)))
 
       if FLAGS.print_misclassified_test_images:
@@ -1083,22 +1111,27 @@ def main(_):
         model_info['input_depth'], model_info['input_mean'],
         model_info['input_std'])
 
+      archetecture='test_all'
+      if FLAGS.reset_bottleneck:
+        resetBottleneck(archetecture)
+
       results, test_ground_truth, test_filenames = (get_random_cached_bottlenecks(
           sess, all_image_lists, FLAGS.test_batch_size, 'testing',
           FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
-          decoded_image_tensor, resized_input_tensor, final_result_tensor, 'test_all'))
+          decoded_image_tensor, resized_input_tensor, final_result_tensor, archetecture))
 
       test_accuracy, predictions = sess.run([evaluation, prediction],
         feed_dict={results_input: results, ground_truth_input: test_ground_truth})
 
       tf.logging.info('Final test accuracy = %.1f%% (N=%d)' % (test_accuracy * 100, len(results)))
-      misc = 0
-      tf.logging.info('=== MISCLASSIFIED TEST IMAGES ===')
-      for i, test_filename in enumerate(test_filenames):
-        if predictions[i] != test_ground_truth[i].argmax():
-          misc += 1
-          tf.logging.info('{0:70s}  {0}'.format(test_filename, list(all_image_lists.keys())[predictions[i]]))
-      tf.logging.info('Misclassified number: {0}/{1} images'.format(misc, len(results)))
+      if FLAGS.print_misclassified_test_images:
+        tf.logging.info('=== MISCLASSIFIED TEST IMAGES ===')
+        misc = 0
+        for i, test_filename in enumerate(test_filenames):
+          if predictions[i] != test_ground_truth[i].argmax():
+            misc += 1
+            tf.logging.info('{0:70s}  {0}'.format(test_filename, list(all_image_lists.keys())[predictions[i]]))
+        tf.logging.info('Misclassified number: {0}/{1} images'.format(misc, len(results)))
 
   if FLAGS.running_method == 'predict':
     final_result_sensor = final_result + ':0'
@@ -1183,6 +1216,12 @@ if __name__ == '__main__':
       help='Path to cache bottleneck layer values as files.'
   )
   parser.add_argument(
+      '--reset_bottleneck',
+      default=True,
+      help='Reset bottlenect files.',
+      action='store_true'
+  )
+  parser.add_argument(
       '--how_many_training_steps',
       type=int,
       default=10,
@@ -1232,7 +1271,7 @@ if __name__ == '__main__':
   )
   parser.add_argument(
       '--print_misclassified_test_images',
-      default=True,
+      default=False,
       help="""\
       Whether to print out a list of all misclassified test images.\
       """,
@@ -1253,7 +1292,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--input_graph',
       type=str,
-      default='/Volumes/Data/_Corpus-data/orchid_final/models/final_output_graph_03.pb',
+      default='/Volumes/Data/_Corpus-data/orchid_final/models/final_output_graph_01.pb',
       help='Where to save the trained graph.'
   )
   parser.add_argument(
