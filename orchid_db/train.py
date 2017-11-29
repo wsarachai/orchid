@@ -24,31 +24,15 @@ from tensorflow.python.util import compat
 
 FLAGS = None
 
-# These are all parameters that are tied to the particular model architecture
-# we're using for Inception v3. These include things like tensor names and their
-# sizes. If you want to adapt this script to work with another model, you will
-# need to update these to reflect the values in the network you're using.
-MAX_NUM_IMAGES_PER_CLASS = 2 ** 27 - 1  # ~134M
+MAX_NUM_IMAGES_PER_CLASS = 2 ** 16 - 1
 
 
 def create_image_lists(image_dir, testing_percentage, validation_percentage):
-  all_genus = ['bulbophyllum', 'dendrobium', 'paphiopedilum']
-  all_genus_size = [len(all_genus[0]), len(all_genus[1]), len(all_genus[2])]
-
   if not gfile.Exists(image_dir):
     tf.logging.error("Image directory '" + image_dir + "' not found.")
     return None
 
-  all_result = {}
-
-  image_lists = {
-    all_genus[0]: {},
-    all_genus[1]: {},
-    all_genus[2]: {}
-  }
-
-  genus_result = {}
-
+  result = {}
 
   sub_dirs = [x[0] for x in gfile.Walk(image_dir)]
 
@@ -122,23 +106,76 @@ def create_image_lists(image_dir, testing_percentage, validation_percentage):
       'validation': validation_images,
     }
 
-    result = None
-    for i in xrange(len(all_genus)):
-      if dir_name[:all_genus_size[i]] == all_genus[i]:
-        result = image_lists[all_genus[i]]
-        break
+    result[label_name] = _result
+  return result
 
-    is_genus = False
-    if not result:
-      if dir_name[:len('genus')] == 'genus':
-        result = genus_result
-        is_genus = True
 
-    if not is_genus:
-      all_result[label_name] = _result
+def create_image_lists_test(image_dir, testing_percentage, validation_percentage):
+  if not gfile.Exists(image_dir):
+    tf.logging.error("Image directory '" + image_dir + "' not found.")
+    return None
+
+  result = {}
+
+  sub_dirs = [x[0] for x in gfile.Walk(image_dir)]
+
+  # The root directory comes first, so skip it.
+  is_root_dir = True
+  for sub_dir in sub_dirs:
+    if is_root_dir:
+      is_root_dir = False
+      continue
+
+    extensions = ['jpg', 'jpeg', 'JPG', 'JPEG']
+    file_list = []
+
+    dir_name = os.path.basename(sub_dir)
+    if dir_name == image_dir:
+      continue
+
+    tf.logging.info("Looking for images in '" + dir_name + "'")
+    for extension in extensions:
+      file_glob = os.path.join(image_dir, dir_name, '*.' + extension)
+      file_list.extend(gfile.Glob(file_glob))
+
+    if not file_list:
+      tf.logging.warning('No files found')
+      continue
+
+    file_size = len(file_list)
+
+    if file_size < 20:
+      tf.logging.warning(
+          'WARNING: Folder has less than 20 images, which may cause issues.')
+
+    label_name = dir_name.lower()
+    training_images = []
+    testing_images = []
+    validation_images = []
+
+    random.shuffle(file_list)
+    testing_idx = int(file_size * testing_percentage)
+    validation_idx = int(file_size * validation_percentage)
+
+    for index, file_name in enumerate(file_list):
+      base_name = os.path.basename(file_name)
+
+      if index < validation_idx:
+        validation_images.append(base_name)
+      elif index < (testing_idx + validation_idx):
+        testing_images.append(base_name)
+      else:
+        training_images.append(base_name)
+
+    _result = {
+      'dir': dir_name,
+      'training': training_images,
+      'testing': testing_images,
+      'validation': validation_images,
+    }
 
     result[label_name] = _result
-  return all_result, image_lists, genus_result
+  return result
 
 
 def maybe_download_and_extract(data_url, dest_directory):
@@ -161,13 +198,13 @@ def maybe_download_and_extract(data_url, dest_directory):
   tarfile.open(filepath, 'r:gz').extractall(dest_directory)
 
 
-def create_model_graph(model_info):
-  if not os.path.exists(FLAGS.output_graph):
+def create_model_graph(model_info, input_graph):
+  if not os.path.exists(input_graph):
     model_dir = os.path.join(FLAGS.model_dir, 'imagenet')
     maybe_download_and_extract(model_info['data_url'], model_dir)
     model_path = os.path.join(model_dir, model_info['model_file_name'])
   else:
-    model_path = FLAGS.output_graph
+    model_path = input_graph
 
   with tf.Graph().as_default() as graph:
     with gfile.FastGFile(model_path, 'rb') as f:
@@ -191,8 +228,10 @@ def prepare_file_system(summaries_dir):
   if tf.gfile.Exists(summaries_dir):
     tf.gfile.DeleteRecursively(summaries_dir)
   tf.gfile.MakeDirs(summaries_dir)
-  if FLAGS.intermediate_store_frequency > 0:
-    ensure_dir_exists(FLAGS.intermediate_output_graphs_dir)
+  #if FLAGS.intermediate_store_frequency > 0:
+  #  ensure_dir_exists(FLAGS.intermediate_output_graphs_dir)
+  if not tf.gfile.Exists(FLAGS.model_dir):
+    tf.gfile.MakeDirs(FLAGS.model_dir)
   return
 
 
@@ -380,7 +419,7 @@ def variable_summaries(var):
     tf.summary.histogram('histogram', var)
 
 
-def add_genus_training_ops(class_count, final_tensor_name, bottleneck_tensor, bottleneck_tensor_size):
+def add_genus_training_ops(class_count, final_tensor_name, bottleneck_tensor, model_info, bottleneck_tensor_size):
   with tf.name_scope('input_genus'):
     bottleneck_input = tf.placeholder_with_default(
       bottleneck_tensor,
@@ -395,11 +434,11 @@ def add_genus_training_ops(class_count, final_tensor_name, bottleneck_tensor, bo
   with tf.name_scope(layer_name):
     with tf.name_scope('fullyc_1'):
       with tf.name_scope('weights'):
-        initial_value = tf.truncated_normal([bottleneck_tensor_size, 1024], stddev=0.001)
+        initial_value = tf.truncated_normal([bottleneck_tensor_size, model_info['hidden_size']], stddev=0.001)
         fullyc_1_weights = tf.Variable(initial_value, name='weights')
         variable_summaries(fullyc_1_weights)
       with tf.name_scope('biases'):
-        fullyc_1_biases = tf.Variable(tf.zeros([1024]), name='biases')
+        fullyc_1_biases = tf.Variable(tf.zeros([model_info['hidden_size']]), name='biases')
         variable_summaries(fullyc_1_biases)
       with tf.name_scope('Wx_plus_b'):
         fullyc_1_logits = tf.matmul(bottleneck_input, fullyc_1_weights) + fullyc_1_biases
@@ -408,7 +447,7 @@ def add_genus_training_ops(class_count, final_tensor_name, bottleneck_tensor, bo
 
     with tf.name_scope('fullyc_2'):
       with tf.name_scope('weights'):
-        initial_value = tf.truncated_normal([1024, class_count], stddev=0.001)
+        initial_value = tf.truncated_normal([model_info['hidden_size'], class_count], stddev=0.001)
         fullyc_2_weights = tf.Variable(initial_value, name='weights')
         variable_summaries(fullyc_2_weights)
       with tf.name_scope('biases'):
@@ -428,13 +467,13 @@ def add_genus_training_ops(class_count, final_tensor_name, bottleneck_tensor, bo
   tf.summary.scalar('cross_entropy', cross_entropy_mean)
 
   with tf.name_scope('train_genus'):
-    optimizer = tf.train.GradientDescentOptimizer(FLAGS.learning_rate)
+    optimizer = tf.train.GradientDescentOptimizer(model_info['learning_rate'])
     train_step = optimizer.minimize(cross_entropy_mean)
 
   return (train_step, cross_entropy_mean, bottleneck_input, ground_truth_input, final_tensor)
 
 
-def add_bulbophyllum_training_ops(class_count, final_tensor_name, bottleneck_tensor, bottleneck_tensor_size):
+def add_bulbophyllum_training_ops(class_count, final_tensor_name, bottleneck_tensor, model_info, bottleneck_tensor_size):
   with tf.name_scope('input_bulbophyllum'):
     bottleneck_input = tf.placeholder_with_default(
         bottleneck_tensor,
@@ -449,11 +488,11 @@ def add_bulbophyllum_training_ops(class_count, final_tensor_name, bottleneck_ten
   with tf.name_scope(layer_name):
     with tf.name_scope('fullyc_1'):
       with tf.name_scope('weights'):
-        initial_value = tf.truncated_normal([bottleneck_tensor_size, 1024], stddev=0.001)
+        initial_value = tf.truncated_normal([bottleneck_tensor_size, model_info['hidden_size']], stddev=0.001)
         fullyc_1_weights = tf.Variable(initial_value, name='weights')
         variable_summaries(fullyc_1_weights)
       with tf.name_scope('biases'):
-        fullyc_1_biases = tf.Variable(tf.zeros([1024]), name='biases')
+        fullyc_1_biases = tf.Variable(tf.zeros([model_info['hidden_size']]), name='biases')
         variable_summaries(fullyc_1_biases)
       with tf.name_scope('Wx_plus_b'):
         fullyc_1_logits = tf.matmul(bottleneck_input, fullyc_1_weights) + fullyc_1_biases
@@ -462,7 +501,7 @@ def add_bulbophyllum_training_ops(class_count, final_tensor_name, bottleneck_ten
 
     with tf.name_scope('fullyc_2'):
       with tf.name_scope('weights'):
-        initial_value = tf.truncated_normal([1024, class_count], stddev=0.001)
+        initial_value = tf.truncated_normal([model_info['hidden_size'], class_count], stddev=0.001)
         fullyc_2_weights = tf.Variable(initial_value, name='weights')
         variable_summaries(fullyc_2_weights)
       with tf.name_scope('biases'):
@@ -482,13 +521,13 @@ def add_bulbophyllum_training_ops(class_count, final_tensor_name, bottleneck_ten
   tf.summary.scalar('cross_entropy', cross_entropy_mean)
 
   with tf.name_scope('train_bulbophyllum'):
-    optimizer = tf.train.GradientDescentOptimizer(FLAGS.learning_rate)
+    optimizer = tf.train.GradientDescentOptimizer(model_info['learning_rate'])
     train_step = optimizer.minimize(cross_entropy_mean)
 
   return (train_step, cross_entropy_mean, bottleneck_input, ground_truth_input, final_tensor)
 
 
-def add_dendrobium_training_ops(class_count, final_tensor_name, bottleneck_tensor, bottleneck_tensor_size):
+def add_dendrobium_training_ops(class_count, final_tensor_name, bottleneck_tensor, model_info, bottleneck_tensor_size):
   with tf.name_scope('input_dendrobium'):
     bottleneck_input = tf.placeholder_with_default(
         bottleneck_tensor,
@@ -503,11 +542,11 @@ def add_dendrobium_training_ops(class_count, final_tensor_name, bottleneck_tenso
   with tf.name_scope(layer_name):
     with tf.name_scope('fullyc_1'):
       with tf.name_scope('weights'):
-        initial_value = tf.truncated_normal([bottleneck_tensor_size, 1024], stddev=0.001)
+        initial_value = tf.truncated_normal([bottleneck_tensor_size, model_info['hidden_size']], stddev=0.001)
         fullyc_1_weights = tf.Variable(initial_value, name='weights')
         variable_summaries(fullyc_1_weights)
       with tf.name_scope('biases'):
-        fullyc_1_biases = tf.Variable(tf.zeros([1024]), name='biases')
+        fullyc_1_biases = tf.Variable(tf.zeros([model_info['hidden_size']]), name='biases')
         variable_summaries(fullyc_1_biases)
       with tf.name_scope('Wx_plus_b'):
         fullyc_1_logits = tf.matmul(bottleneck_input, fullyc_1_weights) + fullyc_1_biases
@@ -516,7 +555,7 @@ def add_dendrobium_training_ops(class_count, final_tensor_name, bottleneck_tenso
 
     with tf.name_scope('fullyc_2'):
       with tf.name_scope('weights'):
-        initial_value = tf.truncated_normal([1024, class_count], stddev=0.001)
+        initial_value = tf.truncated_normal([model_info['hidden_size'], class_count], stddev=0.001)
         fullyc_2_weights = tf.Variable(initial_value, name='weights')
         variable_summaries(fullyc_2_weights)
       with tf.name_scope('biases'):
@@ -536,13 +575,13 @@ def add_dendrobium_training_ops(class_count, final_tensor_name, bottleneck_tenso
   tf.summary.scalar('cross_entropy', cross_entropy_mean)
 
   with tf.name_scope('train_dendrobium'):
-    optimizer = tf.train.GradientDescentOptimizer(FLAGS.learning_rate)
+    optimizer = tf.train.GradientDescentOptimizer(model_info['learning_rate'])
     train_step = optimizer.minimize(cross_entropy_mean)
 
   return (train_step, cross_entropy_mean, bottleneck_input, ground_truth_input, final_tensor)
 
 
-def add_paphiopedilum_training_ops(class_count, final_tensor_name, bottleneck_tensor, bottleneck_tensor_size):
+def add_paphiopedilum_training_ops(class_count, final_tensor_name, bottleneck_tensor, model_info, bottleneck_tensor_size):
   with tf.name_scope('input_paphiopedilum'):
     bottleneck_input = tf.placeholder_with_default(
         bottleneck_tensor,
@@ -557,11 +596,11 @@ def add_paphiopedilum_training_ops(class_count, final_tensor_name, bottleneck_te
   with tf.name_scope(layer_name):
     with tf.name_scope('fullyc_1'):
       with tf.name_scope('weights'):
-        initial_value = tf.truncated_normal([bottleneck_tensor_size, 1024], stddev=0.001)
+        initial_value = tf.truncated_normal([bottleneck_tensor_size, model_info['hidden_size']], stddev=0.001)
         fullyc_1_weights = tf.Variable(initial_value, name='weights')
         variable_summaries(fullyc_1_weights)
       with tf.name_scope('biases'):
-        fullyc_1_biases = tf.Variable(tf.zeros([1024]), name='biases')
+        fullyc_1_biases = tf.Variable(tf.zeros([model_info['hidden_size']]), name='biases')
         variable_summaries(fullyc_1_biases)
       with tf.name_scope('Wx_plus_b'):
         fullyc_1_logits = tf.matmul(bottleneck_input, fullyc_1_weights) + fullyc_1_biases
@@ -570,7 +609,7 @@ def add_paphiopedilum_training_ops(class_count, final_tensor_name, bottleneck_te
 
     with tf.name_scope('fullyc_2'):
       with tf.name_scope('weights'):
-        initial_value = tf.truncated_normal([1024, class_count], stddev=0.001)
+        initial_value = tf.truncated_normal([model_info['hidden_size'], class_count], stddev=0.001)
         fullyc_2_weights = tf.Variable(initial_value, name='weights')
         variable_summaries(fullyc_2_weights)
       with tf.name_scope('biases'):
@@ -590,13 +629,13 @@ def add_paphiopedilum_training_ops(class_count, final_tensor_name, bottleneck_te
   tf.summary.scalar('cross_entropy', cross_entropy_mean)
 
   with tf.name_scope('train_paphiopedilum'):
-    optimizer = tf.train.GradientDescentOptimizer(FLAGS.learning_rate)
+    optimizer = tf.train.GradientDescentOptimizer(model_info['learning_rate'])
     train_step = optimizer.minimize(cross_entropy_mean)
 
   return (train_step, cross_entropy_mean, bottleneck_input, ground_truth_input, final_tensor)
 
 
-def add_final_training_ops(class_count, final_tensor_name, bottleneck_tensor, bottleneck_tensor_size):
+def add_final_training_ops(class_count, final_tensor_name, bottleneck_tensor, model_info, bottleneck_tensor_size):
   with tf.name_scope('input_final'):
     bottleneck_input = tf.placeholder_with_default(
       bottleneck_tensor,
@@ -611,11 +650,11 @@ def add_final_training_ops(class_count, final_tensor_name, bottleneck_tensor, bo
   with tf.name_scope(layer_name):
     with tf.name_scope('fullyc_1'):
       with tf.name_scope('weights'):
-        initial_value = tf.truncated_normal([bottleneck_tensor_size, 1024], stddev=0.001)
+        initial_value = tf.truncated_normal([bottleneck_tensor_size, model_info['hidden_size']], stddev=0.001)
         fullyc_1_weights = tf.Variable(initial_value, name='weights')
         variable_summaries(fullyc_1_weights)
       with tf.name_scope('biases'):
-        fullyc_1_biases = tf.Variable(tf.zeros([1024]), name='biases')
+        fullyc_1_biases = tf.Variable(tf.zeros([model_info['hidden_size']]), name='biases')
         variable_summaries(fullyc_1_biases)
       with tf.name_scope('Wx_plus_b'):
         fullyc_1_logits = tf.matmul(bottleneck_input, fullyc_1_weights) + fullyc_1_biases
@@ -624,7 +663,8 @@ def add_final_training_ops(class_count, final_tensor_name, bottleneck_tensor, bo
 
     with tf.name_scope('fullyc_2'):
       with tf.name_scope('weights'):
-        initial_value = tf.truncated_normal([1024, class_count], stddev=0.001)
+        initial_value = tf.truncated_normal([model_info['hidden_size'], class_count], stddev=0.001)
+        #initial_value = tf.truncated_normal([bottleneck_tensor_size, class_count], stddev=0.001)
         fullyc_2_weights = tf.Variable(initial_value, name='weights')
         variable_summaries(fullyc_2_weights)
       with tf.name_scope('biases'):
@@ -632,6 +672,7 @@ def add_final_training_ops(class_count, final_tensor_name, bottleneck_tensor, bo
         variable_summaries(fullyc_2_biases)
       with tf.name_scope('Wx_plus_b'):
         fullyc_2_logits = tf.matmul(fullyc_1_hidden, fullyc_2_weights) + fullyc_2_biases
+        #fullyc_2_logits = tf.matmul(bottleneck_input, fullyc_2_weights) + fullyc_2_biases
         tf.summary.histogram('pre_activations', fullyc_2_logits)
 
   final_tensor = tf.nn.softmax(fullyc_2_logits, name=final_tensor_name)
@@ -644,7 +685,7 @@ def add_final_training_ops(class_count, final_tensor_name, bottleneck_tensor, bo
   tf.summary.scalar('cross_entropy', cross_entropy_mean)
 
   with tf.name_scope('train_final'):
-    optimizer = tf.train.GradientDescentOptimizer(FLAGS.learning_rate)
+    optimizer = tf.train.GradientDescentOptimizer(model_info['learning_rate'])
     train_step = optimizer.minimize(cross_entropy_mean)
 
   return (train_step, cross_entropy_mean, bottleneck_input, ground_truth_input, final_tensor)
@@ -713,9 +754,13 @@ def save_graph_to_file(sess, graph, graph_file_name, final_tensor_names):
   return
 
 
-def train(role, model_info, image_lists, final_results, add_final_training_ops):
+def train(role, model_info, image_lists, final_results, add_final_training_ops, image_dir, bottleneck_dir, summaries_dir, input_graph):
+
+  output_graph = os.path.join(FLAGS.model_dir, '{0}_output_graph.pb'.format(role))
+  output_label = os.path.join(FLAGS.model_dir, '{0}_output_label.txt'.format(role))
+
   # Set up the pre-trained graph.
-  graph, bottleneck_tensor, resized_image_tensor = (create_model_graph(model_info))
+  graph, bottleneck_tensor, resized_image_tensor = (create_model_graph(model_info, input_graph))
 
   architecture = 'train'
 
@@ -726,8 +771,8 @@ def train(role, model_info, image_lists, final_results, add_final_training_ops):
       model_info['input_depth'], model_info['input_mean'],
       model_info['input_std'])
 
-    cache_bottlenecks(sess, image_lists, FLAGS.image_dir,
-                      FLAGS.bottleneck_dir, jpeg_data_tensor,
+    cache_bottlenecks(sess, image_lists, image_dir,
+                      bottleneck_dir, jpeg_data_tensor,
                       decoded_image_tensor, resized_image_tensor,
                       bottleneck_tensor, architecture)
 
@@ -735,23 +780,24 @@ def train(role, model_info, image_lists, final_results, add_final_training_ops):
       len(image_lists.keys()),
       final_results[0],
       bottleneck_tensor,
+      model_info[role],
       model_info['bottleneck_tensor_size'])
 
     evaluation_step, prediction = add_evaluation_step('{0}_accuracy'.format(role), final_tensor, ground_truth_input)
 
     # Merge all the summaries and write them out to the summaries_dir
     merged = tf.summary.merge_all()
-    train_writer = tf.summary.FileWriter(FLAGS.summaries_dir + '/{0}_train'.format(role), sess.graph)
-    validation_writer = tf.summary.FileWriter(FLAGS.summaries_dir + '/{0}_validation'.format(role))
+    train_writer = tf.summary.FileWriter(summaries_dir + '/{0}_train'.format(role), sess.graph)
+    validation_writer = tf.summary.FileWriter(summaries_dir + '/{0}_validation'.format(role))
 
     # Set up all our weights to their initial default values.
     init = tf.global_variables_initializer()
     sess.run(init)
 
-    for i in range(FLAGS.how_many_training_steps):
+    for i in range(model_info[role]['how_many_training_steps']):
       (train_bottlenecks, train_ground_truth, _) = get_random_cached_bottlenecks(
         sess, image_lists, FLAGS.train_batch_size, 'training',
-        FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
+        bottleneck_dir, image_dir, jpeg_data_tensor,
         decoded_image_tensor, resized_image_tensor,
         bottleneck_tensor, architecture)
 
@@ -764,7 +810,7 @@ def train(role, model_info, image_lists, final_results, add_final_training_ops):
       train_writer.add_summary(train_summary, i)
 
       # Every so often, print out how well the graph is training.
-      is_last_step = (i + 1 == FLAGS.how_many_training_steps)
+      is_last_step = (i + 1 == model_info[role]['how_many_training_steps'])
       if (i % FLAGS.eval_step_interval) == 0 or is_last_step:
         train_accuracy, cross_entropy_value = sess.run(
             [evaluation_step, cross_entropy],
@@ -776,8 +822,8 @@ def train(role, model_info, image_lists, final_results, add_final_training_ops):
         validation_bottlenecks, validation_ground_truth, _ = (
             get_random_cached_bottlenecks(
                 sess, image_lists, FLAGS.validation_batch_size, 'validation',
-                FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
-                decoded_image_tensor, resized_image_tensor, bottleneck_tensor))
+                bottleneck_dir, image_dir, jpeg_data_tensor,
+                decoded_image_tensor, resized_image_tensor, bottleneck_tensor, architecture))
 
         # Run a validation step and capture training summaries for TensorBoard
         # with the `merged` op.
@@ -798,13 +844,16 @@ def train(role, model_info, image_lists, final_results, add_final_training_ops):
         tf.logging.info('Save intermediate result to : ' + intermediate_file_name)
         save_graph_to_file(sess, graph, intermediate_file_name, final_results)
 
+      if ((cross_entropy_value * 10000) <= model_info[role]['convergence']):
+        break
+
     # We've completed all our training, so run a final test evaluation on
     # some new images we haven't used before.
     test_bottlenecks, test_ground_truth, test_filenames = (
         get_random_cached_bottlenecks(
             sess, image_lists, FLAGS.test_batch_size, 'testing',
-            FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
-            decoded_image_tensor, resized_image_tensor, bottleneck_tensor))
+            bottleneck_dir, image_dir, jpeg_data_tensor,
+            decoded_image_tensor, resized_image_tensor, bottleneck_tensor, architecture))
     test_accuracy, predictions = sess.run(
         [evaluation_step, prediction],
         feed_dict={bottleneck_input: test_bottlenecks, ground_truth_input: test_ground_truth})
@@ -816,13 +865,12 @@ def train(role, model_info, image_lists, final_results, add_final_training_ops):
         if predictions[i] != test_ground_truth[i].argmax():
           tf.logging.info('%70s  %s' % (test_filename, list(image_lists.keys())[predictions[i]]))
 
-    with gfile.FastGFile('/Volumes/Data/_Corpus-data/orchid_final/models/{0}_labels.txt'.format(role), 'w') as f:
+    with gfile.FastGFile(output_label, 'w') as f:
       f.write('\n'.join(image_lists.keys()) + '\n')
 
     save_graph_to_file(sess,
                        graph,
-                       FLAGS.output_graph,
-                       #os.path.join(FLAGS.model_dir, '{0}_output_graph.pb'.format(role)),
+                       output_graph,
                        final_results)
 
 
@@ -878,8 +926,8 @@ def delFile(filename):
         print('Error: %s' % e.strerror)
 
 
-def resetBottleneck(architecture):
-  sub_dirs = [x[0] for x in gfile.Walk(FLAGS.bottleneck_dir)]
+def resetBottleneck(architecture, bottleneck_dir):
+  sub_dirs = [x[0] for x in gfile.Walk(bottleneck_dir)]
 
   is_root_dir = True
   for sub_dir in sub_dirs:
@@ -889,7 +937,7 @@ def resetBottleneck(architecture):
 
     file_list = []
     dir_name = os.path.basename(sub_dir)
-    file_glob = os.path.join(FLAGS.bottleneck_dir, dir_name, '*.txt')
+    file_glob = os.path.join(bottleneck_dir, dir_name, '*.txt')
     file_list.extend(gfile.Glob(file_glob))
 
     l = len(architecture) + len('.txt')
@@ -925,69 +973,175 @@ def main(_):
     'model_file_name': 'classify_image_graph_def.pb',
     'input_mean': 128,
     'input_std': 128,
+    'genus': {
+      'how_many_training_steps': 20000,
+      'learning_rate': 0.1,
+      'hidden_size': 128,
+      'convergence': 1
+    },
+    'bobuphyllum': {
+      'how_many_training_steps': 20000,
+      'learning_rate': 0.1,
+      'hidden_size': 512,
+      'convergence': 1
+    },
+    'dendrobium': {
+      'how_many_training_steps': 20000,
+      'learning_rate': 0.1,
+      'hidden_size': 512,
+      'convergence': 1
+    },
+    'paphiopedelum': {
+      'how_many_training_steps': 20000,
+      'learning_rate': 0.1,
+      'hidden_size': 512,
+      'convergence': 1
+    },
+    'final': {
+      'how_many_training_steps': 10000,
+      'learning_rate': 0.1,
+      'hidden_size': 128,
+      'convergence': 2
+    }
   }
 
-  # Look at the folder structure, and create lists of all the images.
-  all_image_lists, specie_image_list, genus_image_list,  = create_image_lists(FLAGS.image_dir, FLAGS.testing_percentage, FLAGS.validation_percentage)
-
-  if FLAGS.running_method == 'all_train':
-    prepare_file_system(FLAGS.summaries_dir)
-
   if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_genus':
-    # genus train ##########################################################################
-    summaries_dir = os.path.join(FLAGS.summaries_dir, 'train_genus')
+    image_dir = '/Volumes/Data/_Corpus-data/orchid-genus/flower_photos/'
+    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-genus/bottleneck'
+    summaries_dir = os.path.join(FLAGS.summaries_dir, 'genus')
+
     prepare_file_system(summaries_dir)
+
+    # Look at the folder structure, and create lists of all the images.
+    image_lists  = create_image_lists(image_dir, FLAGS.testing_percentage, FLAGS.validation_percentage)
+
+    # genus train ##########################################################################
     train('genus',
           model_info,
-          genus_image_list,
+          image_lists,
           [final_result_genus],
-          add_genus_training_ops)
+          add_genus_training_ops,
+          image_dir,
+          bottleneck_dir,
+          summaries_dir,
+          'none')
 
 
   if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_bulbophyllum':
-    # bulbophyllum train ####################################################################
-    summaries_dir = os.path.join(FLAGS.summaries_dir, 'train_bulbophyllum')
+    image_dir = '/Volumes/Data/_Corpus-data/orchid-bulbophyllum_001/flower_photos/'
+    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-bulbophyllum_001/bottleneck'
+    summaries_dir = os.path.join(FLAGS.summaries_dir, 'bulbophyllum')
+
     prepare_file_system(summaries_dir)
+
+    # Look at the folder structure, and create lists of all the images.
+    image_lists = create_image_lists(image_dir, FLAGS.testing_percentage, FLAGS.validation_percentage)
+
+    # bulbophyllum train ####################################################################
+    input_graph = os.path.join(FLAGS.model_dir, '{0}_output_graph.pb'.format('genus'))
+
     train('bulbophyllum',
           model_info,
-          specie_image_list['bulbophyllum'],
+          image_lists,
           [final_result_bulbophyllum, final_result_genus],
-          add_bulbophyllum_training_ops)
+          add_bulbophyllum_training_ops,
+          image_dir,
+          bottleneck_dir,
+          summaries_dir,
+          input_graph)
 
   if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_dendrobium':
-    # dendrobium train ######################################################################
-    summaries_dir = os.path.join(FLAGS.summaries_dir, 'train_dendrobium')
+    image_dir = '/Volumes/Data/_Corpus-data/orchid-dendrobium_001/flower_photos/'
+    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-dendrobium_001/bottleneck'
+    summaries_dir = os.path.join(FLAGS.summaries_dir, 'dendrobium')
+
     prepare_file_system(summaries_dir)
+
+    # Look at the folder structure, and create lists of all the images.
+    image_lists  = create_image_lists(image_dir, FLAGS.testing_percentage, FLAGS.validation_percentage)
+
+    # dendrobium train ######################################################################
+    input_graph = os.path.join(FLAGS.model_dir, '{0}_output_graph.pb'.format('bulbophyllum'))
+
     train('dendrobium',
           model_info,
-          specie_image_list['dendrobium'],
+          image_lists,
           [final_result_dendrobium, final_result_bulbophyllum, final_result_genus],
-          add_dendrobium_training_ops)
+          add_dendrobium_training_ops,
+          image_dir,
+          bottleneck_dir,
+          summaries_dir,
+          input_graph)
 
   if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_paphiopedilum':
-    # paphiopedilum train ####################################################################
-    summaries_dir = os.path.join(FLAGS.summaries_dir, 'train_paphiopedilum')
+    image_dir = '/Volumes/Data/_Corpus-data/orchid-paphiopedilum_001/flower_photos/'
+    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-paphiopedilum_001/bottleneck'
+    summaries_dir = os.path.join(FLAGS.summaries_dir, 'paphiopedilum')
+
     prepare_file_system(summaries_dir)
+
+    # Look at the folder structure, and create lists of all the images.
+    image_lists = create_image_lists(image_dir, FLAGS.testing_percentage, FLAGS.validation_percentage)
+
+    # paphiopedilum train ####################################################################
+    input_graph = os.path.join(FLAGS.model_dir, '{0}_output_graph.pb'.format('dendrobium'))
+
     train('paphiopedilum',
           model_info,
-          specie_image_list['paphiopedilum'],
+          image_lists,
           [final_result_paphiopedilum, final_result_dendrobium, final_result_bulbophyllum, final_result_genus],
-          add_paphiopedilum_training_ops)
+          add_paphiopedilum_training_ops,
+          image_dir,
+          bottleneck_dir,
+          summaries_dir,
+          input_graph)
+
+  if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_final_all':
+    image_dir = '/Volumes/Data/_Corpus-data/orchid-final/flower_photos/'
+    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-final/bottleneck'
+    summaries_dir = os.path.join(FLAGS.summaries_dir, 'final-all')
+
+    prepare_file_system(summaries_dir)
+
+    # Look at the folder structure, and create lists of all the images.
+    image_lists = create_image_lists(image_dir, FLAGS.testing_percentage, FLAGS.validation_percentage)
+
+    # paphiopedilum train ####################################################################
+    input_graph = 'imagenet'
+
+    train('final',
+          model_info,
+          image_lists,
+          [final_result],
+          add_final_training_ops,
+          image_dir,
+          bottleneck_dir,
+          summaries_dir,
+          input_graph)
 
   if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_final':
-    summaries_dir = os.path.join(FLAGS.summaries_dir, 'train_final')
+    image_dir = '/Volumes/Data/_Corpus-data/orchid-final/flower_photos/'
+    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-final/bottleneck'
+    summaries_dir = os.path.join(FLAGS.summaries_dir, 'final')
+
     prepare_file_system(summaries_dir)
+
+    # Look at the folder structure, and create lists of all the images.
+    image_lists = create_image_lists(image_dir, FLAGS.testing_percentage, FLAGS.validation_percentage)
+
     bottleneck_tensor_genus = final_result_genus + ':0'
     bottleneck_tensor_bulbophyllum = final_result_bulbophyllum + ':0'
     bottleneck_tensor_dendrobium = final_result_dendrobium + ':0'
     bottleneck_tensor_paphiopedilum = final_result_paphiopedilum + ':0'
+
+    input_graph = os.path.join(FLAGS.model_dir, '{0}_output_graph.pb'.format('paphiopedilum'))
 
     graph, \
     resized_input_tensor, \
     genus_tensor, \
     bulbophyllum_tensor, \
     dendrobium_tensor, \
-    paphiopedilum_tensor = load_final_graph(os.path.join(FLAGS.model_dir, 'paphiopedilum_output_graph.pb'),
+    paphiopedilum_tensor = load_final_graph(input_graph,
                                       [model_info['resized_input_tensor_name'],
                                       bottleneck_tensor_genus,
                                       bottleneck_tensor_bulbophyllum,
@@ -996,14 +1150,16 @@ def main(_):
 
     with tf.Session(graph=graph) as sess:
       bottleneck_tensor = tf.concat([genus_tensor, bulbophyllum_tensor, dendrobium_tensor, paphiopedilum_tensor], axis=1)
+      bottleneck_tensor_relu = tf.nn.relu(bottleneck_tensor)
 
       train_step, \
       cross_entropy, \
       bottleneck_input, \
       ground_truth_input, \
-      final_tensor = add_final_training_ops(len(all_image_lists.keys()),
+      final_tensor = add_final_training_ops(len(image_lists.keys()),
                                             final_result,
-                                            bottleneck_tensor,
+                                            bottleneck_tensor_relu,
+                                            model_info['final'],
                                             bottleneck_tensor_size=25)
 
       jpeg_data_tensor, decoded_image_tensor = add_jpeg_decoding(
@@ -1013,11 +1169,11 @@ def main(_):
 
       archetecture = 'final_input'
       if FLAGS.reset_bottleneck:
-        resetBottleneck(archetecture)
+        resetBottleneck(archetecture, bottleneck_dir)
 
       train_bottlenecks, train_ground_truth, train_filenames = (get_random_cached_bottlenecks(
-          sess, all_image_lists, FLAGS.train_batch_size, 'training',
-          FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
+          sess, image_lists, FLAGS.train_batch_size, 'training',
+          bottleneck_dir, image_dir, jpeg_data_tensor,
           decoded_image_tensor, resized_input_tensor, bottleneck_tensor, archetecture))
 
       evaluation_step, prediction = add_evaluation_step('final_accuracy', final_tensor, ground_truth_input)
@@ -1049,8 +1205,8 @@ def main(_):
 
           validation_bottlenecks, validation_ground_truth, _ = (
               get_random_cached_bottlenecks(
-                  sess, all_image_lists, FLAGS.validation_batch_size, 'validation',
-                  FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
+                  sess, image_lists, FLAGS.validation_batch_size, 'validation',
+                  bottleneck_dir, image_dir, jpeg_data_tensor,
                   decoded_image_tensor, resized_input_tensor, bottleneck_tensor, archetecture))
 
           validation_summary, validation_accuracy = sess.run(
@@ -1064,8 +1220,8 @@ def main(_):
                            len(validation_bottlenecks)))
 
           test_bottlenecks, test_ground_truth, test_filenames = (get_random_cached_bottlenecks(
-              sess, all_image_lists, FLAGS.test_batch_size, 'testing',
-              FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
+              sess, image_lists, FLAGS.test_batch_size, 'testing',
+              bottleneck_dir, image_dir, jpeg_data_tensor,
               decoded_image_tensor, resized_input_tensor, bottleneck_tensor, archetecture))
 
           test_summary, test_accuracy, predictions = sess.run(
@@ -1074,14 +1230,19 @@ def main(_):
           test_writer.add_summary(test_summary, step)
           tf.logging.info('Final test accuracy = %.1f%% (N=%d)' % (test_accuracy * 100, len(test_bottlenecks)))
 
+        if ((cross_entropy_value * 10000) <= model_info['final']['convergence']):
+          break
+
       if FLAGS.print_misclassified_test_images:
         tf.logging.info('=== MISCLASSIFIED TEST IMAGES ===')
         for i, test_filename in enumerate(test_filenames):
           if predictions[i] != test_ground_truth[i].argmax():
-            tf.logging.info('%70s  %s' % (test_filename, list(all_image_lists.keys())[predictions[i]]))
+            tf.logging.info('%70s  %s' % (test_filename, list(image_lists.keys())[predictions[i]]))
 
-      with gfile.FastGFile('/Volumes/Data/_Corpus-data/orchid_final/models/final_labels.txt', 'w') as f:
-        f.write('\n'.join(all_image_lists.keys()) + '\n')
+      output_label = os.path.join(FLAGS.model_dir, 'final_output_label.txt')
+
+      with gfile.FastGFile(output_label, 'w') as f:
+        f.write('\n'.join(image_lists.keys()) + '\n')
 
       save_graph_to_file(sess,
                          graph,
@@ -1089,13 +1250,20 @@ def main(_):
                          [final_result])
 
   if FLAGS.running_method == 'accuracy':
+    image_dir = '/Volumes/Data/_Corpus-data/orchid-final/flower_photos/'
+    model_dir = '/Volumes/Data/_Corpus-data/models'
+    labels = load_labels("{0}/{1}_output_label.txt".format(model_dir, 'final'))
+    input_graph = os.path.join(model_dir, '{0}_output_graph.pb'.format('final'))
+    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-final/bottleneck'
+
+    # Look at the folder structure, and create lists of all the images.
+    image_lists  = create_image_lists_test(image_dir, 1, 0)
+
     final_result_sensor = final_result + ':0'
-    workspace = '/Volumes/Data/_Corpus-data/orchid_final'
-    labels = load_labels("{0}/models/{1}_labels.txt".format(workspace, 'final'))
 
     graph, \
     resized_input_tensor, \
-    final_result_tensor = load_test_graph(os.path.join(FLAGS.model_dir, FLAGS.input_graph),
+    final_result_tensor = load_test_graph(os.path.join(model_dir, input_graph),
                                           [model_info['resized_input_tensor_name'],
                                            final_result_sensor])
 
@@ -1117,36 +1285,39 @@ def main(_):
         model_info['input_depth'], model_info['input_mean'],
         model_info['input_std'])
 
-      archetecture='test_all'
-      if FLAGS.reset_bottleneck:
-        resetBottleneck(archetecture)
+      archetecture = 'test'
+      #if FLAGS.reset_bottleneck:
+      #  resetBottleneck(archetecture)
+      resetBottleneck(archetecture, bottleneck_dir)
 
       results, test_ground_truth, test_filenames = (get_random_cached_bottlenecks(
-          sess, all_image_lists, FLAGS.test_batch_size, 'testing',
-          FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
+          sess, image_lists, FLAGS.test_batch_size, 'testing',
+          bottleneck_dir, image_dir, jpeg_data_tensor,
           decoded_image_tensor, resized_input_tensor, final_result_tensor, archetecture))
 
       test_accuracy, predictions = sess.run([evaluation, prediction],
         feed_dict={results_input: results, ground_truth_input: test_ground_truth})
 
       tf.logging.info('Final test accuracy = %.1f%% (N=%d)' % (test_accuracy * 100, len(results)))
-      if FLAGS.print_misclassified_test_images:
-        tf.logging.info('=== MISCLASSIFIED TEST IMAGES ===')
-        misc = 0
-        for i, test_filename in enumerate(test_filenames):
-          if predictions[i] != test_ground_truth[i].argmax():
-            misc += 1
-            tf.logging.info('{0:70s}  {0}'.format(test_filename, list(all_image_lists.keys())[predictions[i]]))
-        tf.logging.info('Misclassified number: {0}/{1} images'.format(misc, len(results)))
+
+      tf.logging.info('=== MISCLASSIFIED TEST IMAGES ===')
+      misc = 0
+      for i, test_filename in enumerate(test_filenames):
+        if predictions[i] != test_ground_truth[i].argmax():
+          misc += 1
+          tf.logging.info('{0:70s}:  {1}'.format(os.path.basename(test_filename), list(image_lists.keys())[predictions[i]]))
+      tf.logging.info('Misclassified number: {0}/{1} images'.format(misc, len(results)))
 
   if FLAGS.running_method == 'predict':
+    model_dir = '/Volumes/Data/_Corpus-data/models'
+    labels = load_labels("{0}/{1}_output_label.txt".format(model_dir, 'final'))
+    input_graph = os.path.join(model_dir, '{0}_output_graph.pb'.format('final'))
+
     final_result_sensor = final_result + ':0'
-    workspace = '/Volumes/Data/_Corpus-data/orchid_final'
-    labels = load_labels("{0}/models/{1}_labels.txt".format(workspace, 'final'))
 
     graph, \
     resized_input_tensor, \
-    final_result_tensor = load_test_graph(os.path.join(FLAGS.model_dir, FLAGS.input_graph),
+    final_result_tensor = load_test_graph(os.path.join(model_dir, input_graph),
                                           [model_info['resized_input_tensor_name'],
                                            final_result_sensor])
 
@@ -1171,11 +1342,12 @@ def main(_):
         print("{0} {1:.2f}".format(labels[i], results[i]))
 
 if __name__ == '__main__':
+  print ("Tensorflow version: {0}".format(tf.VERSION))
   parser = argparse.ArgumentParser()
   parser.add_argument(
       '--summaries_dir',
       type=str,
-      default='/Volumes/Data/_Corpus-data/orchid_final/retrain_logs',
+      default='/Volumes/Data/_Corpus-data/retrain_logs',
       help='Where to save summary logs for TensorBoard.'
   )
   parser.add_argument(
@@ -1190,18 +1362,12 @@ if __name__ == '__main__':
   parser.add_argument(
       '--model_dir',
       type=str,
-      default='/Volumes/Data/_Corpus-data/orchid_final/models',
+      default='/Volumes/Data/_Corpus-data/models',
       help="""\
       Path to classify_image_graph_def.pb,
       imagenet_synset_to_human_label_map.txt, and
       imagenet_2012_challenge_label_map_proto.pbtxt.\
       """
-  )
-  parser.add_argument(
-      '--image_dir',
-      type=str,
-      default='/Volumes/Data/_Corpus-data/orchid_final/flower_photos',
-      help='Path to folders of labeled images.'
   )
   parser.add_argument(
       '--testing_percentage',
@@ -1216,14 +1382,8 @@ if __name__ == '__main__':
       help='What percentage of images to use as a validation set.'
   )
   parser.add_argument(
-      '--bottleneck_dir',
-      type=str,
-      default='/Volumes/Data/_Corpus-data/orchid_final/bottleneck',
-      help='Path to cache bottleneck layer values as files.'
-  )
-  parser.add_argument(
       '--reset_bottleneck',
-      default=True,
+      default=False,
       help='Reset bottlenect files.',
       action='store_true'
   )
@@ -1236,7 +1396,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--learning_rate',
       type=float,
-      default=0.03,
+      default=0.1,
       help='How large a learning rate to use when training.'
   )
   parser.add_argument(
@@ -1290,15 +1450,9 @@ if __name__ == '__main__':
       help='Where to save the intermediate graphs.'
   )
   parser.add_argument(
-      '--output_graph',
-      type=str,
-      default='/Volumes/Data/_Corpus-data/orchid_final/models/output_graph.pb',
-      help='Where to save the trained graph.'
-  )
-  parser.add_argument(
       '--input_graph',
       type=str,
-      default='/Volumes/Data/_Corpus-data/orchid_final/models/final_output_graph_01.pb',
+      default='/Volumes/Data/_Corpus-data/orchid_final/models/final_output_graph-002.pb',
       help='Where to save the trained graph.'
   )
   parser.add_argument(
@@ -1315,9 +1469,9 @@ if __name__ == '__main__':
       '--running_method',
       type=str,
       #default='all_train',
-      default='train_final',
+      #default='train_final',
       #default='accuracy',
-      #default='predict',
+      default='predict',
       help="""\
       The training method 'add' to train all model otherwise \
       'genus' for genus training

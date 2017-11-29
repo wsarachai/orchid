@@ -333,7 +333,7 @@ def maybe_download_and_extract(data_url):
     filepath, _ = urllib.request.urlretrieve(data_url, filepath, _progress)
     print()
     statinfo = os.stat(filepath)
-    tf.logging.info('Successfully downloaded', filename, statinfo.st_size, 'bytes.')
+    tf.logging.info('Successfully downloaded {0} {1} bytes.'.format(filename, statinfo.st_size))
   tarfile.open(filepath, 'r:gz').extractall(dest_directory)
 
 
@@ -861,6 +861,7 @@ def create_model_info(architecture):
   if architecture == 'inception_v3':
     # pylint: disable=line-too-long
     data_url = 'http://download.tensorflow.org/models/image/imagenet/inception-2015-12-05.tgz'
+    #data_url = 'http://download.tensorflow.org/models/inception_v3_2016_08_28.tar.gz'
     # pylint: enable=line-too-long
     bottleneck_tensor_name = 'pool_3/_reshape:0'
     bottleneck_tensor_size = 2048

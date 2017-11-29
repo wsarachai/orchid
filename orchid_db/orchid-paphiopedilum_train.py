@@ -542,34 +542,36 @@ def add_final_training_ops(class_count, final_tensor_name, bottleneck_tensor, bo
   with tf.name_scope(layer_name):
     with tf.name_scope('fullyc_1'):
       with tf.name_scope('weights'):
-        initial_value = tf.truncated_normal([bottleneck_tensor_size, 1024], stddev=0.001)
+        initial_value = tf.truncated_normal([bottleneck_tensor_size, class_count], stddev=0.001)
         fullyc_1_weights = tf.Variable(initial_value, name='weights')
         variable_summaries(fullyc_1_weights)
       with tf.name_scope('biases'):
-        fullyc_1_biases = tf.Variable(tf.zeros([1024]), name='biases')
+        fullyc_1_biases = tf.Variable(tf.zeros([class_count]), name='biases')
         variable_summaries(fullyc_1_biases)
       with tf.name_scope('Wx_plus_b'):
         fullyc_1_logits = tf.matmul(bottleneck_input, fullyc_1_weights) + fullyc_1_biases
         tf.summary.histogram('pre_activations', fullyc_1_logits)
-        fullyc_1_hidden = tf.nn.relu(fullyc_1_logits)
+        #fullyc_1_hidden = tf.nn.relu(fullyc_1_logits)
 
-    with tf.name_scope('fullyc_2'):
-      with tf.name_scope('weights'):
-        initial_value = tf.truncated_normal([1024, class_count], stddev=0.001)
-        fullyc_2_weights = tf.Variable(initial_value, name='weights')
-        variable_summaries(fullyc_2_weights)
-      with tf.name_scope('biases'):
-        fullyc_2_biases = tf.Variable(tf.zeros([class_count]), name='biases')
-        variable_summaries(fullyc_2_biases)
-      with tf.name_scope('Wx_plus_b'):
-        fullyc_2_logits = tf.matmul(fullyc_1_hidden, fullyc_2_weights) + fullyc_2_biases
-        tf.summary.histogram('pre_activations', fullyc_2_logits)
 
-  final_tensor = tf.nn.softmax(fullyc_2_logits, name=final_tensor_name)
+    #with tf.name_scope('fullyc_2'):
+    #  with tf.name_scope('weights'):
+    #    initial_value = tf.truncated_normal([1024, class_count], stddev=0.001)
+    #    fullyc_2_weights = tf.Variable(initial_value, name='weights')
+    #    variable_summaries(fullyc_2_weights)
+    #  with tf.name_scope('biases'):
+    #    fullyc_2_biases = tf.Variable(tf.zeros([class_count]), name='biases')
+    #    variable_summaries(fullyc_2_biases)
+    #  with tf.name_scope('Wx_plus_b'):
+    #    fullyc_2_logits = tf.matmul(fullyc_1_hidden, fullyc_2_weights) + fullyc_2_biases
+    #    tf.summary.histogram('pre_activations', fullyc_2_logits)
+
+  #final_tensor = tf.nn.softmax(fullyc_2_logits, name=final_tensor_name)
+  final_tensor = tf.nn.softmax(fullyc_1_logits, name=final_tensor_name)
   tf.summary.histogram('activations', final_tensor)
 
   with tf.name_scope('cross_entropy_paphiopedilum'):
-    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=ground_truth_input, logits=fullyc_2_logits)
+    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=ground_truth_input, logits=fullyc_1_logits)
     with tf.name_scope('total'):
       cross_entropy_mean = tf.reduce_mean(cross_entropy)
   tf.summary.scalar('cross_entropy', cross_entropy_mean)

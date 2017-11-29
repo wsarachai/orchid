@@ -276,13 +276,13 @@ if __name__ == "__main__":
   tf.logging.set_verbosity(tf.logging.INFO)
 
   if running_method == 'accuracy':
-    final_result_sensor = 'final_result_bulbophyllum:0'
+    final_result_sensor = 'final_result_dendrobium:0'
     model_dir = '/Volumes/Data/_Corpus-data/models'
-    labels = load_labels("{0}/{1}_output_label.txt".format(model_dir, 'bulbophyllum'))
-    input_graph = os.path.join(model_dir, '{0}_output_graph.pb'.format('bulbophyllum'))
+    labels = load_labels("{0}/{1}_output_label.txt".format(model_dir, 'dendrobium'))
+    input_graph = os.path.join(model_dir, '{0}_output_graph.pb'.format('dendrobium'))
     resized_input_tensor_name = 'Mul:0'
-    image_dir = '/Volumes/Data/_Corpus-data/orchid-bulbophyllum_001/flower_photos/'
-    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-bulbophyllum_001/bottleneck'
+    image_dir = '/Volumes/Data/_Corpus-data/orchid-dendrobium_001/flower_photos/'
+    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-dendrobium_001/bottleneck'
 
     image_lists = create_image_lists(image_dir, testing_percentage=1, validation_percentage=0)
 
