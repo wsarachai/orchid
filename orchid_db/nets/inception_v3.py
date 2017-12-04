@@ -441,15 +441,11 @@ def inception_v3(inputs,
                             stride=1, padding='SAME'):
           aux_logits = end_points['Mixed_6e']
           with tf.variable_scope('AuxLogits'):
-            aux_logits = slim.avg_pool2d(
-                aux_logits, [5, 5], stride=3, padding='VALID',
-                scope='AvgPool_1a_5x5')
-            aux_logits = slim.conv2d(aux_logits, depth(128), [1, 1],
-                                     scope='Conv2d_1b_1x1')
+            aux_logits = slim.avg_pool2d(aux_logits, [5, 5], stride=3, padding='VALID', scope='AvgPool_1a_5x5')
+            aux_logits = slim.conv2d(aux_logits, depth(128), [1, 1], scope='Conv2d_1b_1x1')
 
             # Shape of feature map before the final layer.
-            kernel_size = _reduced_kernel_size_for_small_input(
-                aux_logits, [5, 5])
+            kernel_size = _reduced_kernel_size_for_small_input(aux_logits, [5, 5])
             aux_logits = slim.conv2d(
                 aux_logits, depth(768), kernel_size,
                 weights_initializer=trunc_normal(0.01),

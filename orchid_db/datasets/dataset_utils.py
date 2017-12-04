@@ -1,3 +1,6 @@
+#!/usr/local/bin/python
+# -*- coding: utf-8 -*-
+
 # Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -139,7 +142,8 @@ def read_label_file(dataset_dir, filename=LABELS_FILENAME):
   """
   labels_filename = os.path.join(dataset_dir, filename)
   with tf.gfile.Open(labels_filename, 'rb') as f:
-    lines = f.read().decode()
+    #lines = f.read().decode()
+    lines = f.read()
   lines = lines.split('\n')
   lines = filter(None, lines)
 

@@ -1,3 +1,6 @@
+#!/usr/local/bin/python
+# -*- coding: utf-8 -*-
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -11,8 +14,7 @@ from preprocessing import preprocessing_factory
 
 slim = tf.contrib.slim
 
-tf.app.flags.DEFINE_string(
-    'master', '', 'The address of the TensorFlow master to use.')
+tf.app.flags.DEFINE_string('master', '', 'The address of the TensorFlow master to use.')
 
 tf.app.flags.DEFINE_string(
     'train_dir', '/tmp/tfmodel/',
@@ -21,7 +23,7 @@ tf.app.flags.DEFINE_string(
 tf.app.flags.DEFINE_integer('num_clones', 1,
                             'Number of model clones to deploy.')
 
-tf.app.flags.DEFINE_boolean('clone_on_cpu', False,
+tf.app.flags.DEFINE_boolean('clone_on_cpu', True,
                             'Use CPUs to deploy clones.')
 
 tf.app.flags.DEFINE_integer('worker_replicas', 1, 'Number of worker replicas.')

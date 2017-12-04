@@ -24,7 +24,7 @@ from tensorflow.python.util import compat
 
 FLAGS = None
 
-MAX_NUM_IMAGES_PER_CLASS = 2 ** 16 - 1
+MAX_NUM_IMAGES_PER_CLASS = 2 ** 32 - 1
 
 
 def create_image_lists(image_dir, testing_percentage, validation_percentage):
@@ -821,7 +821,8 @@ def train(role, model_info, image_lists, final_results, add_final_training_ops, 
 
         validation_bottlenecks, validation_ground_truth, _ = (
             get_random_cached_bottlenecks(
-                sess, image_lists, FLAGS.validation_batch_size, 'validation',
+                #sess, image_lists, FLAGS.validation_batch_size, 'validation',
+                sess, image_lists, FLAGS.validation_batch_size, 'testing',
                 bottleneck_dir, image_dir, jpeg_data_tensor,
                 decoded_image_tensor, resized_image_tensor, bottleneck_tensor, architecture))
 
@@ -998,10 +999,10 @@ def main(_):
       'convergence': 1
     },
     'final': {
-      'how_many_training_steps': 10000,
-      'learning_rate': 0.1,
-      'hidden_size': 128,
-      'convergence': 2
+      'how_many_training_steps': 100000,
+      'learning_rate': 0.01,
+      'hidden_size': 256,
+      'convergence': 9
     }
   }
 
@@ -1171,11 +1172,6 @@ def main(_):
       if FLAGS.reset_bottleneck:
         resetBottleneck(archetecture, bottleneck_dir)
 
-      train_bottlenecks, train_ground_truth, train_filenames = (get_random_cached_bottlenecks(
-          sess, image_lists, FLAGS.train_batch_size, 'training',
-          bottleneck_dir, image_dir, jpeg_data_tensor,
-          decoded_image_tensor, resized_input_tensor, bottleneck_tensor, archetecture))
-
       evaluation_step, prediction = add_evaluation_step('final_accuracy', final_tensor, ground_truth_input)
 
       merged = tf.summary.merge_all()
@@ -1188,6 +1184,12 @@ def main(_):
 
       # Iterate and train.
       for step in range(FLAGS.how_many_training_steps):
+
+        train_bottlenecks, train_ground_truth, train_filenames = (get_random_cached_bottlenecks(
+            sess, image_lists, FLAGS.train_batch_size, 'training',
+            bottleneck_dir, image_dir, jpeg_data_tensor,
+            decoded_image_tensor, resized_input_tensor, bottleneck_tensor, archetecture))
+
         train_summary, _ = sess.run(
           [merged, train_step],
           feed_dict={bottleneck_input: train_bottlenecks,
@@ -1250,16 +1252,20 @@ def main(_):
                          [final_result])
 
   if FLAGS.running_method == 'accuracy':
-    image_dir = '/Volumes/Data/_Corpus-data/orchid-final/flower_photos/'
+    #image_dir = '/Volumes/Data/_Corpus-data/orchid-final/flower_photos/'
+    image_dir = '/Volumes/Data/_Corpus-data/orchid-final/open_flower_photos'
     model_dir = '/Volumes/Data/_Corpus-data/models'
     labels = load_labels("{0}/{1}_output_label.txt".format(model_dir, 'final'))
     input_graph = os.path.join(model_dir, '{0}_output_graph.pb'.format('final'))
-    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-final/bottleneck'
+    #bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-final/bottleneck'
+    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-final/open_flower_photos/bottleneck'
 
     # Look at the folder structure, and create lists of all the images.
-    image_lists  = create_image_lists_test(image_dir, 1, 0)
+    #image_lists  = create_image_lists(image_dir, FLAGS.testing_percentage, FLAGS.validation_percentage)
+    image_lists = create_image_lists_test(image_dir, 1, 0)
 
-    final_result_sensor = final_result + ':0'
+    #final_result_sensor = final_result + ':0'
+    final_result_sensor = 'final_training_ops/fullyc_2/Wx_plus_b/add:0'
 
     graph, \
     resized_input_tensor, \
@@ -1285,15 +1291,21 @@ def main(_):
         model_info['input_depth'], model_info['input_mean'],
         model_info['input_std'])
 
-      archetecture = 'test'
+      archetecture = 'graph'
+      #archetecture = 'test'
       #if FLAGS.reset_bottleneck:
       #  resetBottleneck(archetecture)
-      resetBottleneck(archetecture, bottleneck_dir)
+      #resetBottleneck(archetecture, bottleneck_dir)
 
       results, test_ground_truth, test_filenames = (get_random_cached_bottlenecks(
           sess, image_lists, FLAGS.test_batch_size, 'testing',
           bottleneck_dir, image_dir, jpeg_data_tensor,
           decoded_image_tensor, resized_input_tensor, final_result_tensor, archetecture))
+
+      #results, test_ground_truth, test_filenames = (get_random_cached_bottlenecks(
+      #  sess, image_lists, -1, 'training',
+      #  bottleneck_dir, image_dir, jpeg_data_tensor,
+      #  decoded_image_tensor, resized_input_tensor, final_result_tensor, archetecture))
 
       test_accuracy, predictions = sess.run([evaluation, prediction],
         feed_dict={results_input: results, ground_truth_input: test_ground_truth})
@@ -1328,7 +1340,9 @@ def main(_):
         model_info['input_depth'], model_info['input_mean'],
         model_info['input_std'])
 
-      image_data = gfile.FastGFile(FLAGS.filename, 'rb').read()
+      #image_data = gfile.FastGFile(FLAGS.filename, 'rb').read()
+      image_data = gfile.FastGFile('/Volumes/Data/_Corpus-data/orchids/ThaiNativeOrchids/raw data/unknow/orchid27.jpg', 'rb').read()
+      #image_data = gfile.FastGFile('/Volumes/Data/_Corpus-data/orchid-final/flower_photos/dendrobium_chrysotoxum Lindl_เอื้องคำ/dendrobium_chrysotoxum lindl_เอื้องคำ_042.jpg').read()
 
       try:
         results = run_bottleneck_on_image(
@@ -1339,7 +1353,7 @@ def main(_):
 
       top_k = results.argsort()[::-1]
       for i in top_k:
-        print("{0} {1:.2f}".format(labels[i], results[i]))
+        print("{0} {1:0.4f}".format(labels[i], results[i]))
 
 if __name__ == '__main__':
   print ("Tensorflow version: {0}".format(tf.VERSION))
@@ -1372,13 +1386,13 @@ if __name__ == '__main__':
   parser.add_argument(
       '--testing_percentage',
       type=int,
-      default=10,
+      default=20,
       help='What percentage of images to use as a test set.'
   )
   parser.add_argument(
       '--validation_percentage',
       type=int,
-      default=10,
+      default=0,
       help='What percentage of images to use as a validation set.'
   )
   parser.add_argument(
@@ -1396,7 +1410,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--learning_rate',
       type=float,
-      default=0.1,
+      default=0.01,
       help='How large a learning rate to use when training.'
   )
   parser.add_argument(
