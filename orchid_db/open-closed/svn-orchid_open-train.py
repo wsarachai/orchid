@@ -12,22 +12,13 @@ from sklearn import svm
 
 from tensorflow.python.platform import gfile
 
-data_dir = '/tmp'
-
-
-def load_data_lines(filename):
-  label = []
-  data_as_ascii_lines = gfile.GFile(filename).readlines()
-  for l in data_as_ascii_lines:
-    label.append(l.rstrip())
-  return label
-
+import utils
 
 def load_data():
   data_all = []
-  d_closed_all = load_data_lines(os.path.join(data_dir, 'closed-all.txt'))
-  d_closed = load_data_lines(os.path.join(data_dir, 'closed.txt'))
-  d_open = load_data_lines(os.path.join(data_dir, 'open.txt'))
+  d_closed_all = utils.load_data_lines('closed-all.txt')
+  d_closed = utils.load_data_lines('closed.txt')
+  d_open = utils.load_data_lines('open.txt')
 
   data_all.extend(d_closed_all)
   data_all.extend(d_closed)
@@ -74,3 +65,4 @@ def main():
 if __name__ == '__main__':
   main()
   print ("Done.")
+  exit()

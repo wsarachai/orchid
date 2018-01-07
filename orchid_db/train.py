@@ -702,11 +702,17 @@ def add_evaluation_step(name_scope, result_tensor, ground_truth_tensor):
   return evaluation_step, prediction
 
 
+def getKeys(image_lists):
+  lst = list(image_lists.keys())
+  lst.sort()
+  return lst
+
+
 def get_random_cached_bottlenecks(sess, image_lists, how_many, category,
                                   bottleneck_dir, image_dir, jpeg_data_tensor,
                                   decoded_image_tensor, resized_input_tensor,
                                   bottleneck_tensor, archetecture):
-  class_count = len(image_lists.keys())
+  class_count = len(getKeys(image_lists))
   bottlenecks = []
   ground_truths = []
   filenames = []
@@ -714,10 +720,8 @@ def get_random_cached_bottlenecks(sess, image_lists, how_many, category,
   if how_many >= 0:
     # Retrieve a random sample of bottlenecks.
     for unused_i in range(how_many):
-      if unused_i == 4:
-        unused_i = unused_i
       label_index = random.randrange(class_count)
-      label_name = list(image_lists.keys())[label_index]
+      label_name = list(getKeys(image_lists))[label_index]
       image_index = random.randrange(MAX_NUM_IMAGES_PER_CLASS + 1)
       image_name = get_image_path(image_lists, label_name, image_index, image_dir, category)
       bottleneck = get_or_create_bottleneck(
@@ -731,7 +735,7 @@ def get_random_cached_bottlenecks(sess, image_lists, how_many, category,
       filenames.append(image_name)
   else:
     # Retrieve all bottlenecks.
-    for label_index, label_name in enumerate(image_lists.keys()):
+    for label_index, label_name in enumerate(getKeys(image_lists)):
       for image_index, image_name in enumerate(
           image_lists[label_name][category]):
         image_name = get_image_path(image_lists, label_name, image_index, image_dir, category)
@@ -777,7 +781,7 @@ def train(role, model_info, image_lists, final_results, add_final_training_ops, 
                       bottleneck_tensor, architecture)
 
     (train_step, cross_entropy, bottleneck_input, ground_truth_input, final_tensor) = add_final_training_ops(
-      len(image_lists.keys()),
+      len(getKeys(image_lists)),
       final_results[0],
       bottleneck_tensor,
       model_info[role],
@@ -864,10 +868,10 @@ def train(role, model_info, image_lists, final_results, add_final_training_ops, 
       tf.logging.info('=== MISCLASSIFIED TEST IMAGES ===')
       for i, test_filename in enumerate(test_filenames):
         if predictions[i] != test_ground_truth[i].argmax():
-          tf.logging.info('%70s  %s' % (test_filename, list(image_lists.keys())[predictions[i]]))
+          tf.logging.info('%70s  %s' % (test_filename, list(getKeys(image_lists))[predictions[i]]))
 
     with gfile.FastGFile(output_label, 'w') as f:
-      f.write('\n'.join(image_lists.keys()) + '\n')
+      f.write('\n'.join(getKeys(image_lists)) + '\n')
 
     save_graph_to_file(sess,
                        graph,
@@ -999,7 +1003,7 @@ def main(_):
       'convergence': 1
     },
     'final': {
-      'how_many_training_steps': 100000,
+      'how_many_training_steps': 15000,
       'learning_rate': 0.01,
       'hidden_size': 256,
       'convergence': 9
@@ -1007,8 +1011,8 @@ def main(_):
   }
 
   if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_genus':
-    image_dir = '/Volumes/Data/_Corpus-data/orchid-genus/flower_photos/'
-    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-genus/bottleneck'
+    image_dir = '/Volumes/Data/_dataset/orchid-genus/flower_photos/'
+    bottleneck_dir = '/Volumes/Data/_dataset/orchid-genus/bottleneck'
     summaries_dir = os.path.join(FLAGS.summaries_dir, 'genus')
 
     prepare_file_system(summaries_dir)
@@ -1029,8 +1033,8 @@ def main(_):
 
 
   if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_bulbophyllum':
-    image_dir = '/Volumes/Data/_Corpus-data/orchid-bulbophyllum_001/flower_photos/'
-    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-bulbophyllum_001/bottleneck'
+    image_dir = '/Volumes/Data/_dataset/orchid-bulbophyllum_001/flower_photos/'
+    bottleneck_dir = '/Volumes/Data/_dataset/orchid-bulbophyllum_001/bottleneck'
     summaries_dir = os.path.join(FLAGS.summaries_dir, 'bulbophyllum')
 
     prepare_file_system(summaries_dir)
@@ -1052,8 +1056,8 @@ def main(_):
           input_graph)
 
   if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_dendrobium':
-    image_dir = '/Volumes/Data/_Corpus-data/orchid-dendrobium_001/flower_photos/'
-    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-dendrobium_001/bottleneck'
+    image_dir = '/Volumes/Data/_dataset/orchid-dendrobium_001/flower_photos/'
+    bottleneck_dir = '/Volumes/Data/_dataset/orchid-dendrobium_001/bottleneck'
     summaries_dir = os.path.join(FLAGS.summaries_dir, 'dendrobium')
 
     prepare_file_system(summaries_dir)
@@ -1075,8 +1079,8 @@ def main(_):
           input_graph)
 
   if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_paphiopedilum':
-    image_dir = '/Volumes/Data/_Corpus-data/orchid-paphiopedilum_001/flower_photos/'
-    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-paphiopedilum_001/bottleneck'
+    image_dir = '/Volumes/Data/_dataset/orchid-paphiopedilum_001/flower_photos/'
+    bottleneck_dir = '/Volumes/Data/_dataset/orchid-paphiopedilum_001/bottleneck'
     summaries_dir = os.path.join(FLAGS.summaries_dir, 'paphiopedilum')
 
     prepare_file_system(summaries_dir)
@@ -1098,8 +1102,8 @@ def main(_):
           input_graph)
 
   if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_final_all':
-    image_dir = '/Volumes/Data/_Corpus-data/orchid-final/flower_photos/'
-    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-final/bottleneck'
+    image_dir = '/Volumes/Data/_dataset/orchid-final/flower_photos/'
+    bottleneck_dir = '/Volumes/Data/_dataset/orchid-final/bottleneck'
     summaries_dir = os.path.join(FLAGS.summaries_dir, 'final-all')
 
     prepare_file_system(summaries_dir)
@@ -1121,8 +1125,8 @@ def main(_):
           input_graph)
 
   if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_final':
-    image_dir = '/Volumes/Data/_Corpus-data/orchid-final/flower_photos/'
-    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-final/bottleneck'
+    image_dir = '/Volumes/Data/_dataset/orchid-final/flower_photos/'
+    bottleneck_dir = '/Volumes/Data/_dataset/orchid-final/bottleneck'
     summaries_dir = os.path.join(FLAGS.summaries_dir, 'final')
 
     prepare_file_system(summaries_dir)
@@ -1157,7 +1161,7 @@ def main(_):
       cross_entropy, \
       bottleneck_input, \
       ground_truth_input, \
-      final_tensor = add_final_training_ops(len(image_lists.keys()),
+      final_tensor = add_final_training_ops(len(getKeys(image_lists)),
                                             final_result,
                                             bottleneck_tensor_relu,
                                             model_info['final'],
@@ -1239,12 +1243,12 @@ def main(_):
         tf.logging.info('=== MISCLASSIFIED TEST IMAGES ===')
         for i, test_filename in enumerate(test_filenames):
           if predictions[i] != test_ground_truth[i].argmax():
-            tf.logging.info('%70s  %s' % (test_filename, list(image_lists.keys())[predictions[i]]))
+            tf.logging.info('%70s  %s' % (test_filename, list(getKeys(image_lists))[predictions[i]]))
 
       output_label = os.path.join(FLAGS.model_dir, 'final_output_label.txt')
 
       with gfile.FastGFile(output_label, 'w') as f:
-        f.write('\n'.join(image_lists.keys()) + '\n')
+        f.write('\n'.join(getKeys(image_lists)) + '\n')
 
       save_graph_to_file(sess,
                          graph,
@@ -1252,13 +1256,14 @@ def main(_):
                          [final_result])
 
   if FLAGS.running_method == 'accuracy':
-    #image_dir = '/Volumes/Data/_Corpus-data/orchid-final/flower_photos/'
-    image_dir = '/Volumes/Data/_Corpus-data/orchid-final/open_flower_photos'
-    model_dir = '/Volumes/Data/_Corpus-data/models'
+    image_dir = '/Volumes/Data/_dataset/orchid-final/flower_photos/'
+    #image_dir = '/Volumes/Data/_dataset/orchid-final/open_flower_photos'
+    model_dir = '/Volumes/Data/_dataset/models'
     labels = load_labels("{0}/{1}_output_label.txt".format(model_dir, 'final'))
     input_graph = os.path.join(model_dir, '{0}_output_graph.pb'.format('final'))
-    #bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-final/bottleneck'
-    bottleneck_dir = '/Volumes/Data/_Corpus-data/orchid-final/open_flower_photos/bottleneck'
+    #bottleneck_dir = '/Volumes/Data/_dataset/orchid-final/bottleneck'
+    #bottleneck_dir = '/Volumes/Data/_dataset/orchid-final/bottleneck_graph'
+    bottleneck_dir = '/Volumes/Data/_dataset/orchid_open-closed/bottleneck/raw/closed'
 
     # Look at the folder structure, and create lists of all the images.
     #image_lists  = create_image_lists(image_dir, FLAGS.testing_percentage, FLAGS.validation_percentage)
@@ -1317,11 +1322,11 @@ def main(_):
       for i, test_filename in enumerate(test_filenames):
         if predictions[i] != test_ground_truth[i].argmax():
           misc += 1
-          tf.logging.info('{0:70s}:  {1}'.format(os.path.basename(test_filename), list(image_lists.keys())[predictions[i]]))
+          tf.logging.info('{0:70s}:  {1}'.format(os.path.basename(test_filename), list(getKeys(image_lists))[predictions[i]]))
       tf.logging.info('Misclassified number: {0}/{1} images'.format(misc, len(results)))
 
   if FLAGS.running_method == 'predict':
-    model_dir = '/Volumes/Data/_Corpus-data/models'
+    model_dir = '/Volumes/Data/_dataset/models'
     labels = load_labels("{0}/{1}_output_label.txt".format(model_dir, 'final'))
     input_graph = os.path.join(model_dir, '{0}_output_graph.pb'.format('final'))
 
@@ -1341,8 +1346,8 @@ def main(_):
         model_info['input_std'])
 
       #image_data = gfile.FastGFile(FLAGS.filename, 'rb').read()
-      image_data = gfile.FastGFile('/Volumes/Data/_Corpus-data/orchids/ThaiNativeOrchids/raw data/unknow/orchid27.jpg', 'rb').read()
-      #image_data = gfile.FastGFile('/Volumes/Data/_Corpus-data/orchid-final/flower_photos/dendrobium_chrysotoxum Lindl_เอื้องคำ/dendrobium_chrysotoxum lindl_เอื้องคำ_042.jpg').read()
+      image_data = gfile.FastGFile('/Volumes/Data/_dataset/orchids/ThaiNativeOrchids/raw data/unknow/orchid27.jpg', 'rb').read()
+      #image_data = gfile.FastGFile('/Volumes/Data/_dataset/orchid-final/flower_photos/dendrobium_chrysotoxum Lindl_เอื้องคำ/dendrobium_chrysotoxum lindl_เอื้องคำ_042.jpg').read()
 
       try:
         results = run_bottleneck_on_image(
@@ -1361,7 +1366,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--summaries_dir',
       type=str,
-      default='/Volumes/Data/_Corpus-data/retrain_logs',
+      default='/Volumes/Data/_dataset/retrain_logs',
       help='Where to save summary logs for TensorBoard.'
   )
   parser.add_argument(
@@ -1376,7 +1381,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--model_dir',
       type=str,
-      default='/Volumes/Data/_Corpus-data/models',
+      default='/Volumes/Data/_dataset/models',
       help="""\
       Path to classify_image_graph_def.pb,
       imagenet_synset_to_human_label_map.txt, and
@@ -1460,23 +1465,23 @@ if __name__ == '__main__':
   parser.add_argument(
       '--intermediate_output_graphs_dir',
       type=str,
-      default='/Volumes/Data/_Corpus-data/orchid_final/intermediate_graph/',
+      default='/Volumes/Data/_dataset/orchid_final/intermediate_graph/',
       help='Where to save the intermediate graphs.'
   )
   parser.add_argument(
       '--input_graph',
       type=str,
-      default='/Volumes/Data/_Corpus-data/orchid_final/models/final_output_graph-002.pb',
+      default='/Volumes/Data/_dataset/orchid_final/models/final_output_graph-002.pb',
       help='Where to save the trained graph.'
   )
   parser.add_argument(
       '--filename',
       type=str,
-      #default='/Volumes/Data/_Corpus-data/orchid_final/flower_photos/bulbophyllum_dayanum Rchb_สิงโตขยุกขยุย/bulbophyllum_dayanum rchb_สิงโตขยุกขยุย_010.jpg',
-      #default='/Volumes/Data/_Corpus-data/orchid_final/flower_photos/paphiopedilum_intanon-villosum_อินทนนท์/paphiopedilum_intanon-villosum_อินทนนท์_007.jpg',
-      #default='/Volumes/Data/_Corpus-data/orchid_final/flower_photos/paphiopedilum_callosum_คางกบ/paphiopedilum_callosum_คางกบ_045.jpg',
-      #default='/Volumes/Data/_Corpus-data/orchid_final/flower_photos/dendrobium_lindleyi Steud_เอื้องผึ้ง/dendrobium_lindleyi steud_เอื้องผึ้ง_004.jpg',
-      default='/Volumes/Data/_Corpus-data/orchid_final/flower_photos/dendrobium_chrysotoxum Lindl_เอื้องคำ/dendrobium_chrysotoxum lindl_เอื้องคำ_004.jpg',
+      #default='/Volumes/Data/_dataset/orchid_final/flower_photos/bulbophyllum_dayanum Rchb_สิงโตขยุกขยุย/bulbophyllum_dayanum rchb_สิงโตขยุกขยุย_010.jpg',
+      #default='/Volumes/Data/_dataset/orchid_final/flower_photos/paphiopedilum_intanon-villosum_อินทนนท์/paphiopedilum_intanon-villosum_อินทนนท์_007.jpg',
+      #default='/Volumes/Data/_dataset/orchid_final/flower_photos/paphiopedilum_callosum_คางกบ/paphiopedilum_callosum_คางกบ_045.jpg',
+      #default='/Volumes/Data/_dataset/orchid_final/flower_photos/dendrobium_lindleyi Steud_เอื้องผึ้ง/dendrobium_lindleyi steud_เอื้องผึ้ง_004.jpg',
+      default='/Volumes/Data/_dataset/orchid_final/flower_photos/dendrobium_chrysotoxum Lindl_เอื้องคำ/dendrobium_chrysotoxum lindl_เอื้องคำ_004.jpg',
       help='The image file to predict.'
   )
   parser.add_argument(
