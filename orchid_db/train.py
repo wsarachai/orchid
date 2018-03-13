@@ -32,6 +32,10 @@ def create_image_lists(image_dir, testing_percentage, validation_percentage):
     tf.logging.error("Image directory '" + image_dir + "' not found.")
     return None
 
+  total_sample_images = 0
+  train_sample_images = 0
+  test_sample_images = 0
+  validation_sample_images = 0
   result = {}
 
   sub_dirs = [x[0] for x in gfile.Walk(image_dir)]
@@ -72,6 +76,8 @@ def create_image_lists(image_dir, testing_percentage, validation_percentage):
     testing_images = []
     validation_images = []
 
+    total_sample_images += len(file_list)
+
     for file_name in file_list:
       base_name = os.path.basename(file_name)
       # We want to ignore anything after '_nohash_' in the file name when
@@ -106,7 +112,19 @@ def create_image_lists(image_dir, testing_percentage, validation_percentage):
       'validation': validation_images,
     }
 
+    train_sample_images += len(training_images)
+    test_sample_images += len(testing_images)
+    validation_sample_images += len(validation_images)
+
+    tf.logging.info("training size: {}, testing size: {}, validation size: {}"
+                    .format(len(training_images), len(testing_images), len(validation_images)))
+
     result[label_name] = _result
+
+  tf.logging.info("Total sample image: {}".format(total_sample_images))
+  tf.logging.info("Training sample image: {}".format(train_sample_images))
+  tf.logging.info("Testing sample image: {}".format(test_sample_images))
+  tf.logging.info("Validation sample image: {}".format(validation_sample_images))
   return result
 
 
@@ -675,7 +693,7 @@ def add_final_training_ops(class_count, final_tensor_name, bottleneck_tensor, mo
         #fullyc_2_logits = tf.matmul(bottleneck_input, fullyc_2_weights) + fullyc_2_biases
         tf.summary.histogram('pre_activations', fullyc_2_logits)
 
-  final_tensor = tf.nn.softmax(fullyc_2_logits, name=final_tensor_name)
+  final_tensor = tf.nn.softmax(fullyc_2_logits, name=final_tensor_name) # The output predition
   tf.summary.histogram('activations', final_tensor)
 
   with tf.name_scope('cross_entropy'):
@@ -1102,9 +1120,11 @@ def main(_):
           input_graph)
 
   if FLAGS.running_method == 'all_train' or FLAGS.running_method == 'train_final_all':
-    image_dir = '/Volumes/Data/_dataset/orchid-final/flower_photos/'
-    bottleneck_dir = '/Volumes/Data/_dataset/orchid-final/bottleneck'
-    summaries_dir = os.path.join(FLAGS.summaries_dir, 'final-all')
+    #image_dir = '/Volumes/Data/_dataset/orchid-final/flower_photos/'
+    #bottleneck_dir = '/Volumes/Data/_dataset/orchid-final/bottleneck'
+    image_dir = '/Volumes/Data/_dataset/17Flowers/images/'
+    bottleneck_dir = '/Volumes/Data/_dataset/17Flowers/bottleneck'
+    summaries_dir = os.path.join(FLAGS.summaries_dir, '17f-final-all')
 
     prepare_file_system(summaries_dir)
 
@@ -1262,15 +1282,15 @@ def main(_):
     labels = load_labels("{0}/{1}_output_label.txt".format(model_dir, 'final'))
     input_graph = os.path.join(model_dir, '{0}_output_graph.pb'.format('final'))
     #bottleneck_dir = '/Volumes/Data/_dataset/orchid-final/bottleneck'
-    #bottleneck_dir = '/Volumes/Data/_dataset/orchid-final/bottleneck_graph'
-    bottleneck_dir = '/Volumes/Data/_dataset/orchid_open-closed/bottleneck/raw/closed'
+    bottleneck_dir = '/Volumes/Data/_dataset/orchid-final/bottleneck_graph'
+    #bottleneck_dir = '/Volumes/Data/_dataset/orchid_open-closed/bottleneck/raw/closed'
 
     # Look at the folder structure, and create lists of all the images.
-    #image_lists  = create_image_lists(image_dir, FLAGS.testing_percentage, FLAGS.validation_percentage)
-    image_lists = create_image_lists_test(image_dir, 1, 0)
+    image_lists  = create_image_lists(image_dir, FLAGS.testing_percentage, FLAGS.validation_percentage)
+    #image_lists = create_image_lists_test(image_dir, 1, 0)
 
-    #final_result_sensor = final_result + ':0'
-    final_result_sensor = 'final_training_ops/fullyc_2/Wx_plus_b/add:0'
+    final_result_sensor = final_result + ':0'
+    #final_result_sensor = 'final_training_ops/fullyc_2/Wx_plus_b/add:0'
 
     graph, \
     resized_input_tensor, \
@@ -1302,15 +1322,15 @@ def main(_):
       #  resetBottleneck(archetecture)
       #resetBottleneck(archetecture, bottleneck_dir)
 
-      results, test_ground_truth, test_filenames = (get_random_cached_bottlenecks(
-          sess, image_lists, FLAGS.test_batch_size, 'testing',
-          bottleneck_dir, image_dir, jpeg_data_tensor,
-          decoded_image_tensor, resized_input_tensor, final_result_tensor, archetecture))
-
       #results, test_ground_truth, test_filenames = (get_random_cached_bottlenecks(
-      #  sess, image_lists, -1, 'training',
-      #  bottleneck_dir, image_dir, jpeg_data_tensor,
-      #  decoded_image_tensor, resized_input_tensor, final_result_tensor, archetecture))
+      #    sess, image_lists, FLAGS.test_batch_size, 'testing',
+      #    bottleneck_dir, image_dir, jpeg_data_tensor,
+      #    decoded_image_tensor, resized_input_tensor, final_result_tensor, archetecture))
+
+      results, test_ground_truth, test_filenames = (get_random_cached_bottlenecks(
+        sess, image_lists, -1, 'testing',
+        bottleneck_dir, image_dir, jpeg_data_tensor,
+        decoded_image_tensor, resized_input_tensor, final_result_tensor, archetecture))
 
       test_accuracy, predictions = sess.run([evaluation, prediction],
         feed_dict={results_input: results, ground_truth_input: test_ground_truth})
@@ -1490,7 +1510,7 @@ if __name__ == '__main__':
       #default='all_train',
       #default='train_final',
       #default='accuracy',
-      default='predict',
+      #default='predict',
       help="""\
       The training method 'add' to train all model otherwise \
       'genus' for genus training

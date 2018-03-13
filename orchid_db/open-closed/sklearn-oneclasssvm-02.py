@@ -151,8 +151,10 @@ def test_open():
       preds = model.predict(closed)
       targs = np.ones(len(closed))
       accs.append(metrics.accuracy_score(targs, preds))
-    imax = np.argmax(accs)
-    print ("Closed accuracy model({0})-data({1}): {2}".format(i, imax, accs[imax]) )
+    #imax = np.argmax(accs)
+    #print ("Closed accuracy model({0})-data({1}): {2}".format(i, imax, accs[imax]) )
+    sresult = ["{0:.2f}".format(x) for x in accs]
+    print (sresult)
 
 if __name__ == '__main__':
   #main()

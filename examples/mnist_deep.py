@@ -85,7 +85,7 @@ def deepnn(x):
   b_fc2 = bias_variable([10])
 
   y_conv = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
-  return y_conv, keep_prob
+  return y_conv, keep_prob, W_conv1, W_conv2
 
 
 def conv2d(x, W):
@@ -101,7 +101,11 @@ def max_pool_2x2(x):
 
 def weight_variable(shape):
   """weight_variable generates a weight variable of a given shape."""
-  initial = tf.truncated_normal(shape, stddev=0.1)
+  #initial = tf.truncated_normal(shape, stddev=0.01)
+  #initial = tf.constant(0.01, shape=shape)
+  #initial = tf.random_normal(shape=shape, mean=0.0, stddev=0.001)
+  initial = tf.random_uniform(shape=shape, minval=-0.01, maxval=0.01)
+  #initial = tf.zeros(shape=shape)
   return tf.Variable(initial)
 
 
@@ -122,23 +126,33 @@ def main(_):
   y_ = tf.placeholder(tf.float32, [None, 10])
 
   # Build the graph for the deep net
-  y_conv, keep_prob = deepnn(x)
+  y_conv, keep_prob, W_conv1, W_conv2 = deepnn(x)
 
-  cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_conv))
+  pred = tf.nn.softmax(y_conv)
+  y_mul = y_ * tf.log(pred)
+  y_re = tf.reduce_sum(y_mul, reduction_indices=1)
+  cross_entropy = tf.reduce_mean(-y_re)
+
+  #cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_conv))
   train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
+  #train_step = tf.train.GradientDescentOptimizer(1e-4).minimize(cross_entropy)
   correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
   accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
   with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
+
     #for i in range(20000):
-    for i in range(200):
+    for i in range(1000):
       batch = mnist.train.next_batch(50)
-      print (batch[0].shape)
-      print(batch[1].shape)
-      if i % 100 == 0:
+      if i % 50 == 0:
         train_accuracy = accuracy.eval(feed_dict={x: batch[0], y_: batch[1], keep_prob: 1.0})
+        w = sess.run(W_conv1)
+        print (w[0][0][0])
+        print (w[1][0][0])
         print('step %d, training accuracy %g' % (i, train_accuracy))
+        print(sess.run(cross_entropy, feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5}))
+
       train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
 
     print('test accuracy %g' % accuracy.eval(feed_dict={

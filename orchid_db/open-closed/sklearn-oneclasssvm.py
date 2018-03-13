@@ -54,7 +54,7 @@ def main():
     outliers_data.append(bottleneck_values[:-1])
     outliers_labels.append(bottleneck_values[-1:][0])
 
-  model = svm.OneClassSVM(nu=0.55, kernel='rbf', gamma=0.00005)
+  model = svm.OneClassSVM(nu=0.8, kernel='rbf', gamma=0.00005)
   for _ in xrange(500):
     model.fit(train_data)
 
